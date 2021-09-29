@@ -319,84 +319,86 @@ func (self *Device) devAppChanged(bundleId string) {
 }
 
 func (self *Device) startProcs() {
-	// start wda
-	self.wda = NewWDA(self.config, self.devTracker, self)
-	if self.config.wdaMethod == "manual" {
-		//self.wda.startWdaNng()
-	}
-
-	self.startBackupFrameProvider() // just the timed loop
-	self.backupVideo = self.bridge.NewBackupVideo(
-		self.backupVideoPort,
-		func(interface{}) {}, // onStop
-	)
-
-	//self.enableBackupVideo()
-
-	self.bridge.NewSyslogMonitor(func(msg string, app string) {
-		//msg := root.GetAt( 3 ).String()
-		//app := root.GetAt( 1 ).String()
-
-		//fmt.Printf("Msg:%s\n", msg )
-
-		if app == "SpringBoard(SpringBoard)" {
-			if strings.Contains(msg, "Presenting <SBUserNotificationAlert") {
-				alerts := self.config.alerts
-
-				useAlertMode := true
-				if len(alerts) > 0 {
-					for _, alert := range alerts {
-						if strings.Contains(msg, alert.match) {
-							fmt.Printf("Alert matching \"%s\" appeared. Autoresponding with \"%s\"\n",
-								alert.match, alert.response)
-							if self.wdaRunning {
-								useAlertMode = false
-								btn := self.wda.ElByName(alert.response)
-								if btn == "" {
-									fmt.Printf("Alert does not contain button \"%s\"\n", alert.response)
-								} else {
-									self.wda.ElClick(btn)
-								}
-							}
-
-						}
-					}
-				}
-
-				if useAlertMode && self.vidUp {
-					fmt.Printf("Alert appeared\n")
-					if len(alerts) > 0 {
-						fmt.Printf("Alert did not match any autoresponses; Msg content: %s\n", msg)
-					}
-					self.EventCh <- DevEvent{action: DEV_ALERT_APPEAR}
-					self.alertMode = true
-				}
-			} else if strings.Contains(msg, "deactivate alertItem: <SBUserNotificationAlert") {
-				if self.alertMode {
-					self.alertMode = false
-					fmt.Printf("Alert went away\n")
-					self.EventCh <- DevEvent{action: DEV_ALERT_GONE}
-				}
-			}
-		} else if app == "SpringBoard(FrontBoard)" {
-			if strings.Contains(msg, "Setting process visibility to: Foreground") {
-				fmt.Printf("Process vis line:%s\n", msg)
-				appStr := "application<"
-				index := strings.Index(msg, appStr)
-				after := index + len(appStr)
-				left := msg[after:]
-				endPos := strings.Index(left, ">")
-				app := left[:endPos]
-				fmt.Printf("app:%s\n", app)
-				self.EventCh <- DevEvent{action: DEV_APP_CHANGED, data: app}
-			}
-		} else if app == "dasd" {
-			if strings.HasPrefix(msg, "Foreground apps changed") {
-				//fmt.Printf("App changed\n")
-				//self.EventCh <- DevEvent{ action: DEV_APP_CHANGED }
-			}
-		}
-	})
+    // start wda
+    self.wda = NewWDA( self.config, self.devTracker, self )
+    if self.config.wdaMethod == "manual" {
+        //self.wda.startWdaNng()
+    }
+    
+    self.startBackupFrameProvider() // just the timed loop
+    self.backupVideo = self.bridge.NewBackupVideo( 
+        self.backupVideoPort,
+        func( interface{} ) {}, // onStop
+    )
+    
+    //self.enableBackupVideo()
+    
+    self.bridge.NewSyslogMonitor( func( msg string, app string ) {
+        //msg := root.GetAt( 3 ).String()
+        //app := root.GetAt( 1 ).String()
+        
+        //fmt.Printf("Msg:%s\n", msg )
+        
+        if app == "SpringBoard(SpringBoard)" {
+            if strings.Contains( msg, "Presenting <SBUserNotificationAlert" ) {
+                alerts := self.config.alerts
+                
+                useAlertMode := true
+                if len( alerts ) > 0 {
+                    for _, alert := range alerts {
+                        if strings.Contains( msg, alert.match ) {
+                            fmt.Printf("Alert matching \"%s\" appeared. Autoresponding with \"%s\"\n",
+                                alert.match, alert.response )
+                            if self.wdaRunning {
+                                useAlertMode = false
+                                btn := self.wda.ElByName( alert.response )
+                                if btn == "" {
+                                    fmt.Printf("Alert does not contain button \"%s\"\n", alert.response )
+                                } else {
+                                    self.wda.ElClick( btn )
+                                }
+                            }
+                            
+                        }
+                    }
+                }
+                
+                if useAlertMode && self.vidUp { 
+                    fmt.Printf("Alert appeared\n")
+                    if len( alerts ) > 0 {
+                        fmt.Printf("Alert did not match any autoresponses; Msg content: %s\n", msg )
+                    }
+                    self.EventCh <- DevEvent{ action: DEV_ALERT_APPEAR }
+                    self.alertMode = true
+                }
+            } else if strings.Contains( msg, "deactivate alertItem: <SBUserNotificationAlert" ) {
+                if self.alertMode {
+                    self.alertMode = false
+                    fmt.Printf("Alert went away\n")
+                    self.EventCh <- DevEvent{ action: DEV_ALERT_GONE }
+                }
+            }
+        } else if app == "SpringBoard(FrontBoard)" {
+            if strings.Contains( msg, "Setting process visibility to: Foreground" ) {
+                fmt.Printf("Process vis line:%s\n", msg )
+                appStr := "application<"
+                index := strings.Index( msg, appStr )
+                if index != -1 {
+                    after := index + len( appStr )
+                    left := msg[after:]
+                    endPos := strings.Index( left, ">" )
+                    app := left[:endPos]
+                    fmt.Printf("app:%s\n", app )
+                    self.EventCh <- DevEvent{ action: DEV_APP_CHANGED, data: app }
+                }
+            }
+        } else if app == "dasd" {
+            if strings.HasPrefix( msg, "Foreground apps changed" ) {
+                //fmt.Printf("App changed\n")
+                //self.EventCh <- DevEvent{ action: DEV_APP_CHANGED }
+            }
+        }
+    } )
 }
 
 func (self *Device) startProcs2() {
