@@ -5,7 +5,7 @@
       "https": true,
       "selfSigned": true
     },
-    "wda": {
+    "cfa": {
       "devTeamOu": "8WH83DMLCD",
       "bundleIdPrefix": "com.appium",
       "runner": {

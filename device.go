@@ -210,6 +210,8 @@ func (self *Device) startEventLoop() {
 				} else if action == DEV_VIDEO_START { // first video frame
 					self.cf.notifyVideoStarted(self.udid)
 					self.onFirstFrame(&event)
+					self.home()
+					self.home()
 				} else if action == DEV_VIDEO_STOP {
 					self.cf.notifyVideoStopped(self.udid)
 				} else if action == DEV_ALERT_APPEAR {
