@@ -45,10 +45,10 @@ type BridgeDev interface {
   gestaltnode( names []string ) map[string]uj.JNode
   ps() []iProc
   screenshot() Screenshot
-  wda( onStart func(), onStop func(interface{}) )
+  cfa( onStart func(), onStop func(interface{}) )
   destroy()
   setProcTracker( procTracker ProcTracker )
-  NewBackupVideo( port int, onStop func( interface{} ) ) ( *BackupVideo )
+  NewBackupVideo( port int, onStop func( interface{} ) ) BackupVideo
   GetPid( appname string ) uint64
   AppInfo( bundleId string ) uj.JNode
   InstallApp( appPath string ) bool
@@ -56,4 +56,8 @@ type BridgeDev interface {
   Kill( pid uint64 )
   SetConfig( devConfig *CDevice )
   SetDevice( device *Device )
+}
+
+type BackupVideo interface {
+  GetFrame() []byte
 }
