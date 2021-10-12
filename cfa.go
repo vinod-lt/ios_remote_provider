@@ -5,6 +5,7 @@ import (
     //"io/ioutil"
     "net/http"
     "strings"
+    "os"
     "time"
     log "github.com/sirupsen/logrus"
     uj "github.com/nanoscopic/ujsonin/v2/mod"
@@ -454,9 +455,9 @@ func (self *CFA) ElForceTouch( elId string, pressure int ) {
     log.Info( "elForceTouch:", elId, pressure )
     json := fmt.Sprintf( `{
         action: "elForceTouch"
-        element: "%s"
-        "duration": 1
-        "pressure": %d
+        id: "%s"
+        time: 2
+        pressure: %d
     }`, elId, pressure )
     
     self.nngSocket.Send([]byte(json))
@@ -516,11 +517,36 @@ func (self *CFA) WindowSize() (int,int) {
     return width,height
 }
 
-func (self *CFA) Source() string {
-    self.nngSocket.Send([]byte(`{ action: "source" }`))
+func (self *CFA) Source(bi string) string {
+    biLine := ""
+    if bi != "" {
+        biLine = "bi: \"" + bi + "\""
+    }
+    json := fmt.Sprintf( `{
+        action: "source"
+        %s
+    }`, biLine )
+    self.nngSocket.Send([]byte(json))
     srcBytes, _ := self.nngSocket.Recv()
         
     return string(srcBytes)
+}
+
+func (self *CFA) ElPos(id string) (int,int,int,int) {
+    json := fmt.Sprintf( `{
+        action: "elPos"
+        id: "%s"
+    }`, id )
+    self.nngSocket.Send([]byte(json))
+    posJson, _ := self.nngSocket.Recv()
+    
+    root, _, _ := uj.ParseFull( posJson )
+    w := root.Get("w").Int()
+    h := root.Get("h").Int()
+    x := root.Get("x").Int()
+    y := root.Get("y").Int()
+    
+    return x,y,w,h
 }
 
 func (self *CFA) AlertInfo() ( uj.JNode, string ) {
@@ -540,6 +566,18 @@ func (self *CFA) AlertInfo() ( uj.JNode, string ) {
 
 func (self *CFA) SourceJson() string {
     self.nngSocket.Send([]byte(`{ action: "sourcej" }`))
+    srcBytes, _ := self.nngSocket.Recv()
+        
+    return string(srcBytes)
+}
+
+func (self *CFA) AppAtPoint( x int, y int ) string {
+    json := fmt.Sprintf( `{
+        action: "elementAtPoint"
+        x: %d
+        y: %d
+    }`, x, y )
+    self.nngSocket.Send([]byte(json))
     srcBytes, _ := self.nngSocket.Recv()
         
     return string(srcBytes)
@@ -565,16 +603,62 @@ func (self *CFA) OpenControlCenter( controlCenterMethod string ) {
     if controlCenterMethod == "bottomUp" {
         midx := width / 2
         maxy := height - 1
-        self.swipe( midx, maxy, midx, maxy - 100, 0.1 )
+        self.swipe( midx, maxy, midx, maxy - 200, 0.2 )
     } else if controlCenterMethod == "topDown" {
         maxx := width - 1
-        self.swipe( maxx, 0, maxx, 100, 0.1 )
+        self.swipe( maxx, 0, maxx, 200, 0.2 )
     }    
+}
+
+func (self *CFA) swipeBack() {
+    width, height := self.WindowSize()
+    midy := height / 2
+    midx := width / 2
+    self.swipe( 1, midy, midx, midy, 0.1 )
+}
+
+func (self *CFA) AddRecordingToCC() {
+    self.create_session("com.apple.Preferences")
+    
+    self.AppChanged("com.apple.Preferences")
+    
+    i := 0
+    ccEl := ""
+    for {
+        ccEl = self.GetEl("staticText","Control Center", false, 1 )
+        if ccEl == "" {
+            self.swipeBack()
+            i++
+            if i>3 {
+                break
+            }
+            continue;
+        }
+        break
+    }
+    self.ElClick( ccEl )
+    
+    customizeEl := self.GetEl("staticText","Customize Controls", false, 2 )
+    self.ElClick( customizeEl )
+    
+    //x,y,w,h := self.ElPos( addRecEl )
+    //fmt.Printf("x:%d,y:%d,w:%d,h:%d\n",x,y,w,h)
+    
+    width, height := self.WindowSize()
+    midy := height / 2
+    midx := width / 2
+    
+    self.swipe( midx, midy, midx, midy-100, 0.1 )
+    
+    addRecEl := self.GetEl("button","Insert Screen Recording", false, 2 )
+    
+    self.ElClick( addRecEl )
 }
 
 func (self *CFA) StartBroadcastStream( appName string, bid string, devConfig *CDevice ) {
     method := devConfig.vidStartMethod
     ccMethod := devConfig.controlCenterMethod
+    ccRecordingMethod := devConfig.ccRecordingMethod
     
     sid := self.create_session( bid )
     if sid == "" {
@@ -621,17 +705,28 @@ func (self *CFA) StartBroadcastStream( appName string, bid string, devConfig *CD
         self.ElClick( toSelector )
         
         startBtn := self.GetEl( "button", "Start Broadcast", true, 5 )
+        if startBtn == "" {
+            fmt.Printf("Error! Could not fetch Start Broadcast button\n")
+        }
         self.ElClick( startBtn )
     } else if method == "controlCenter" {
         fmt.Printf("Starting vidApp through control center\n")
+        time.Sleep( time.Second * 2 )
         self.OpenControlCenter( ccMethod )
         //self.Source()
         
         devEl := self.GetEl( "button", "Screen Recording", true, 5 )
         fmt.Printf("Selecting Screen Recording; el=%s\n", devEl )
-        self.ElLongTouch( devEl )
+        if ccRecordingMethod == "longTouch" {
+            self.ElLongTouch( devEl )
+        } else if ccRecordingMethod == "forceTouch" {
+            self.ElForceTouch( devEl, 1 )
+        } else {
+            fmt.Printf("ccRecordingMethod for a device must be either longTouch or forceTouch\n")
+            os.Exit(0)
+        }
         
-        appEl := self.GetEl( "any", appName, true, 5 )
+        appEl := self.GetEl( "staticText", appName, true, 5 )
         self.ElClick( appEl )
         
         startBtn := self.GetEl( "button", "Start Broadcast", true, 5 )
