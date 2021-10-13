@@ -14,6 +14,15 @@
       },
       "startMethod": "go-ios"
     },
+    "wda": {
+      "devTeamOu": "8WH83DMLCD",
+      "bundleIdPrefix": "com.appium",
+      "runner": {
+        "buildStyle": "Automatic",
+        "provisioningProfile": ""
+      },
+      "startMethod": "go-ios"
+    },
     "vidapp": {
       "devTeamOu": "8WH83DMLCD",
       "bundleIdPrefix": "com.dryark"
@@ -22,12 +31,16 @@
       {
         "udid": "00008030-00121DD20146402E",
         "uiWidth": 414,
-        "uiHeight": 896
+        "uiHeight": 896,
+        "wdaMethod": "go-ios",
+        "cfaMethod":"go-ios"
       },
       {
         "udid": "328d2fc4e39a54c86a81671b4f901b23ab50379f",
         "uiWidth": 375,
-        "uiHeight": 667
+        "uiHeight": 667,
+        "wdaMethod": "go-ios",
+        "cfaMethod":"go-ios"
       }
     ]
 }
