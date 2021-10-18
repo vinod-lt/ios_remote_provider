@@ -16,6 +16,7 @@ type CDevice struct {
     uiHeight            int
     cfaMethod           string
     wdaMethod           string
+    tunnelMethod        string
     wdaPort             int
     vidStartMethod      string
     controlCenterMethod string
@@ -168,6 +169,7 @@ func readDevs( root uj.JNode ) ( map[string]CDevice ) {
             cfaMethod := ""
             wdaMethod := ""
             ccRecordingMethod := "longTouch"
+            tunnelMethod := "go-ios"
             if widthNode != nil {
                 uiWidth = widthNode.Int()
             }
@@ -185,7 +187,7 @@ func readDevs( root uj.JNode ) ( map[string]CDevice ) {
             }
             wdaMethodNode := devNode.Get("wdaMethod")
             if wdaMethodNode != nil {
-                wdaMethod = cfaMethodNode.String()
+                wdaMethod = wdaMethodNode.String()
             }
             methodNode := devNode.Get("controlCenterMethod")
             if methodNode != nil {
@@ -199,6 +201,10 @@ func readDevs( root uj.JNode ) ( map[string]CDevice ) {
             if ccRecordingMethodNode != nil {
                 ccRecordingMethod = ccRecordingMethodNode.String()
             }
+            tunnelMethodNode := devNode.Get("tunnelMethod")
+            if tunnelMethodNode != nil {
+                tunnelMethod = tunnelMethodNode.String()
+            }
             
             dev := CDevice{
                 udid: udid,
@@ -210,6 +216,7 @@ func readDevs( root uj.JNode ) ( map[string]CDevice ) {
                 vidStartMethod: vidStartMethod,
                 controlCenterMethod: controlCenterMethod,
                 ccRecordingMethod: ccRecordingMethod,
+                tunnelMethod: tunnelMethod,
             }
             devs[ udid ] = dev
         } )
