@@ -2,7 +2,7 @@
     "controlfloor": {
       "host": "localhost:8080",
       "username": "first",
-      "https": true,
+      "https": false,
       "selfSigned": true
     },
     "cfa": {
