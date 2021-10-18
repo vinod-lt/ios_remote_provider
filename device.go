@@ -40,18 +40,20 @@ const (
 )
 
 type Device struct {
-	udid              string
-	name              string
-	lock              *sync.Mutex
-	wdaPort           int
-	wdaPortFixed      bool
-	cfaNngPort        int
-	vidPort           int
-	vidControlPort    int
-	vidLogPort        int
-	backupVideoPort   int
-	mjpegVideoPort    int
+	udid            string
+	name            string
+	lock            *sync.Mutex
+	wdaPort         int
+	wdaPortFixed    bool
+	cfaNngPort      int
+	cfaNngPort2     int
+	vidPort         int
+	vidControlPort  int
+	vidLogPort      int
+	backupVideoPort int
+	//mjpegVideoPort  int
 	iosVersion        string
+	versionParts      []int
 	productType       string
 	productNum        string
 	vidWidth          int
@@ -88,22 +90,24 @@ func NewDevice(config *Config, devTracker *DeviceTracker, udid string, bdev Brid
 		//wdaPort:         devTracker.getPort(),
 		wdaPortFixed:    false,
 		cfaNngPort:      devTracker.getPort(),
+		cfaNngPort2:     devTracker.getPort(),
 		vidPort:         devTracker.getPort(),
 		vidLogPort:      devTracker.getPort(),
 		vidMode:         VID_NONE,
 		vidControlPort:  devTracker.getPort(),
 		backupVideoPort: devTracker.getPort(),
-		mjpegVideoPort:  devTracker.getPort(),
-		backupActive:    false,
-		config:          config,
-		udid:            udid,
-		lock:            &sync.Mutex{},
-		process:         make(map[string]*GenericProc),
-		cf:              devTracker.cf,
-		EventCh:         make(chan DevEvent),
-		BackupCh:        make(chan BackupEvent),
-		bridge:          bdev,
-		cfaRunning:      false,
+		//mjpegVideoPort:  devTracker.getPort(),
+		backupActive: false,
+		config:       config,
+		udid:         udid,
+		lock:         &sync.Mutex{},
+		process:      make(map[string]*GenericProc),
+		cf:           devTracker.cf,
+		EventCh:      make(chan DevEvent),
+		BackupCh:     make(chan BackupEvent),
+		bridge:       bdev,
+		cfaRunning:   false,
+		versionParts: []int{0, 0, 0},
 		//wdaRunning:      false,
 	}
 	if devConfig, ok := config.devs[udid]; ok {
@@ -130,11 +134,12 @@ func (self *Device) releasePorts() {
 		dt.freePort(self.wdaPort)
 	}
 	dt.freePort(self.cfaNngPort)
+	dt.freePort(self.cfaNngPort2)
 	dt.freePort(self.vidPort)
 	dt.freePort(self.vidLogPort)
 	dt.freePort(self.vidControlPort)
 	dt.freePort(self.backupVideoPort)
-	dt.freePort(self.mjpegVideoPort)
+	//dt.freePort( self.mjpegVideoPort )
 }
 
 func (self *Device) startProc(proc *GenericProc) {
@@ -500,6 +505,9 @@ func (self *Device) justStartBroadcast() {
 
 func (self *Device) startVidStream() { // conn *ws.Conn ) {
 	conn := self.cf.connectVidChannel(self.udid)
+
+	imgData := self.cfa.Screenshot()
+	conn.WriteMessage(ws.BinaryMessage, imgData)
 
 	var controlChan chan int
 	if self.vidStreamer != nil {
