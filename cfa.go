@@ -592,6 +592,20 @@ func (self *CFA) AlertInfo() (uj.JNode, string) {
 	}
 }
 
+func (self *CFA) WifiIp() string {
+	self.nngSocket.Send([]byte(`{ action: "wifiIp" }`))
+	srcBytes, _ := self.nngSocket.Recv()
+
+	return string(srcBytes)
+}
+
+func (self *CFA) Refresh() string {
+	self.nngSocket.Send([]byte(`{ action: "refresh" }`))
+	srcBytes, _ := self.nngSocket.Recv()
+
+	return string(srcBytes)
+}
+
 func (self *CFA) SourceJson() string {
 	self.nngSocket.Send([]byte(`{ action: "sourcej" }`))
 	srcBytes, _ := self.nngSocket.Recv()
@@ -745,6 +759,7 @@ func (self *CFA) StartBroadcastStream(appName string, bid string, devConfig *CDe
 		if os >= 14 {
 			startBtn := self.GetEl("button", "Start Broadcast", true, 5)
 			self.ElClick(startBtn)
+
 		} else {
 			startBtn := self.GetEl("staticText", "Start Broadcast", false, 5)
 			self.ElClick(startBtn)
