@@ -627,3 +627,6 @@ func (self *Device) source() string {
 func (self *Device) WifiIp() string {
 	return self.cfa.WifiIp()
 }
+func (self *Device) Refresh() string {
+	return self.cfa.Refresh()
+}
