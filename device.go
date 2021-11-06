@@ -623,3 +623,10 @@ func (self *Device) keys(keys string) {
 func (self *Device) source() string {
 	return self.cfa.SourceJson()
 }
+
+func (self *Device) WifiIp() string {
+	return self.cfa.WifiIp()
+}
+func (self *Device) Refresh() string {
+	return self.cfa.Refresh()
+}
