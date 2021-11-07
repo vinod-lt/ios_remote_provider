@@ -53,6 +53,7 @@ func main() {
 	uclop.AddCmd("source", "Get device xml source", runSource, sourceOpts)
 	uclop.AddCmd("wifiIp", "Get Wifi IP address", runWifiIp, idOpt)
 	uclop.AddCmd("refresh", "Get Stream Reset", runRefresh, idOpt)
+	uclop.AddCmd("restart", "Get Stream Restart", runRestart, idOpt)
 	uclop.AddCmd("alertinfo", "Get alert info", runAlertInfo, idOpt)
 	uclop.AddCmd("islocked", "Check if device screen is locked", runIsLocked, idOpt)
 	uclop.AddCmd("unlock", "Unlock device screen", runUnlock, idOpt)
@@ -428,6 +429,12 @@ func runRefresh(cmd *uc.Cmd) {
 	cfaWrapped(cmd, "", func(cfa *CFA) {
 		refresh := cfa.Refresh()
 		fmt.Println(refresh)
+	})
+}
+func runRestart(cmd *uc.Cmd) {
+	cfaWrapped(cmd, "", func(cfa *CFA) {
+		restart := cfa.Restart()
+		fmt.Println(restart)
 	})
 }
 
