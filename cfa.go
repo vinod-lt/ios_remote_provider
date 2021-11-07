@@ -606,6 +606,13 @@ func (self *CFA) Refresh() string {
 	return string(srcBytes)
 }
 
+func (self *CFA) Restart() string {
+	self.nngSocket.Send([]byte(`{ action: "restart" }`))
+	srcBytes, _ := self.nngSocket.Recv()
+
+	return string(srcBytes)
+}
+
 func (self *CFA) SourceJson() string {
 	self.nngSocket.Send([]byte(`{ action: "sourcej" }`))
 	srcBytes, _ := self.nngSocket.Recv()

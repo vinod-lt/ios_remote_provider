@@ -171,6 +171,16 @@ func (self *CFR_Refresh) asText() string {
 	return string(text)
 }
 
+type CFR_Restart struct {
+	Id      int    `json:"id"`
+	Restart string `json:"restart"`
+}
+
+func (self *CFR_Restart) asText() string {
+	text, _ := json.Marshal(self)
+	return string(text)
+}
+
 func (self *ControlFloor) startVidStream(udid string) {
 	dev := self.DevTracker.getDevice(udid)
 	dev.startVidStream()
@@ -394,6 +404,17 @@ func (self *ControlFloor) openWebsocket() {
 						if dev != nil {
 							refresh := dev.Refresh()
 							respondChan <- &CFR_Refresh{Id: id, Refresh: refresh}
+						} else {
+							respondChan <- &CFR_Pong{id: id, text: "done"}
+						}
+					}()
+				} else if mType == "restart" {
+					udid := root.Get("udid").String()
+					go func() {
+						dev := self.DevTracker.getDevice(udid)
+						if dev != nil {
+							restart := dev.Restart()
+							respondChan <- &CFR_Restart{Id: id, Restart: restart}
 						} else {
 							respondChan <- &CFR_Pong{id: id, text: "done"}
 						}
