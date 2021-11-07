@@ -630,3 +630,6 @@ func (self *Device) WifiIp() string {
 func (self *Device) Refresh() string {
 	return self.cfa.Refresh()
 }
+func (self *Device) Restart() string {
+	return self.cfa.Restart()
+}
