@@ -454,11 +454,13 @@ func (self *Device) enableVideo() {
 
 	// If it is running, kill it
 	if vidPid != 0 {
+		fmt.Printf("Killed Vidapp\n")
 		self.bridge.Kill(vidPid)
 
 		// Kill off replayd in case it is stuck
 		rp_id := self.bridge.GetPid("replayd")
 		if rp_id != 0 {
+			fmt.Printf("Killed replayd\n")
 			self.bridge.Kill(rp_id)
 		}
 	}
