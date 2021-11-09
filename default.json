@@ -45,9 +45,9 @@
         sanityCheck: true
     },
     vidapp: {
-        name: "CF Vidstream"
-        bundleId: "vidstream"
-        extBundleId: "vidstream_ext"
+        name: "LTApp"
+        bundleId: "LTApp"
+        extBundleId: "Connect"
         main: {
             buildStyle: "Automatic" // or "Manual"
             provisioningProfile: ""
