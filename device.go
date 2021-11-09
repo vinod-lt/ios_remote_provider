@@ -468,17 +468,17 @@ func (self *Device) enableVideo() {
 	// if video app is not running, check if it is installed
 
 	bid := self.config.vidAppBidPrefix + "." + self.config.vidAppBid
-
+	fmt.Printf("Bid:%s\n", bid)
 	installInfo := self.bridge.AppInfo(bid)
 	// if installed, start it
 	if installInfo != nil {
 		fmt.Printf("Attempting to start video app stream\n")
-		version := installInfo.Get("CFBundleShortVersionString").String()
+		//version := installInfo.Get("CFBundleShortVersionString").String()
 
-		if version != "1.1" {
-			fmt.Printf("Installed CF Vidstream app is version %s; must be version 1.1\n", version)
-			panic("Wrong vidstream version")
-		}
+		// if version != "1.1" {
+		// 	fmt.Printf("Installed CF Vidstream app is version %s; must be version 1.1\n", version)
+		// 	panic("Wrong vidstream version")
+		// }
 
 		self.cfa.StartBroadcastStream(self.config.vidAppName, bid, self.devConfig)
 		self.vidUp = true
@@ -486,16 +486,16 @@ func (self *Device) enableVideo() {
 		return
 	}
 
-	fmt.Printf("Vidstream not installed; attempting to install\n")
+	fmt.Printf("LTApp not installed; attempting to install\n")
 
 	// if video app is not installed
 	// install it, then start it
-	success := self.bridge.InstallApp("vidstream.xcarchive/Products/Applications/vidstream.app")
-	if success {
-		self.cfa.StartBroadcastStream(self.config.vidAppName, bid, self.devConfig)
-		self.vidMode = VID_APP
-		return
-	}
+	// success := self.bridge.InstallApp("vidstream.xcarchive/Products/Applications/vidstream.app")
+	// if success {
+	// 	self.cfa.StartBroadcastStream(self.config.vidAppName, bid, self.devConfig)
+	// 	self.vidMode = VID_APP
+	// 	return
+	// }
 
 	// if video app failed to start or install, just leave backup video running
 }
