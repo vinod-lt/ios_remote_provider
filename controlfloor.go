@@ -500,6 +500,18 @@ func (self *ControlFloor) baseNotify(name string, udid string, variant string, v
 			"udid":   censorUuid(udid),
 			"values": vals,
 		}).Info(fmt.Sprintf("Notifying CF of %s", name))
+		//if WDA started successfully, we can now go to home screen
+		if name == "WDA start" {
+			fmt.Println("Going home")
+			dev := self.DevTracker.getDevice(udid)
+			if dev != nil {
+				dev.home()
+				dev.home()
+				dev.home()
+			} else {
+				fmt.Println("Device not found for going home")
+			}
+		}
 	}
 }
 
