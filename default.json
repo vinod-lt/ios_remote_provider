@@ -70,6 +70,10 @@
             match: "Vidstream has stopped"
             response: "OK"
         }
+        {
+            match: "Screen Broadcasting"
+            response: "OK"
+        }
     ]
     vidStartAlerts: [
         {
@@ -80,5 +84,10 @@
             match: "Vidstream has stopped"
             response: "OK"
         }
+        {
+            match: "Screen Broadcasting"
+            response: "OK"
+        }
+        
     ]
 }
