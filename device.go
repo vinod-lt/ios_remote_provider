@@ -408,6 +408,16 @@ func (self *Device) startProcs() {
 					app := left[:endPos]
 					fmt.Printf("app:%s\n", app)
 					self.EventCh <- DevEvent{action: DEV_APP_CHANGED, data: app}
+					//check if ignore app id present in config
+					if self.config.ignoreApps != nil {
+						for _, ignoreApp := range self.config.ignoreApps {
+							if ignoreApp == app {
+								fmt.Printf("Ignoring app:%s\n", app)
+								self.home()
+							}
+						}
+					}
+
 				}
 			}
 		} else if app == "dasd" {
