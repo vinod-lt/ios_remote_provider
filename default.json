@@ -74,6 +74,18 @@
             match: "Screen Broadcasting"
             response: "OK"
         }
+        {
+            match: "use your location"
+            response: "Allow Once"
+        }
+        {
+            match: "Access Your Photos"
+            response: "Allow Access to All Photos"
+        }
+        {
+            match: "Access the Camera"
+            response: "OK"
+        }
     ]
     vidStartAlerts: [
         {
@@ -86,6 +98,18 @@
         }
         {
             match: "Screen Broadcasting"
+            response: "OK"
+        }
+        {
+            match: "use your location"
+            response: "Allow Once"
+        }
+        {
+            match: "Access Your Photos"
+            response: "Allow Access to All Photos"
+        }
+        {
+            match: "Access the Camera"
             response: "OK"
         }
         
