@@ -82,6 +82,7 @@ type Device struct {
 	shuttingDown      bool
 	alertMode         bool
 	vidUp             bool
+	sessionActive     bool // if session is actively used
 }
 
 func NewDevice(config *Config, devTracker *DeviceTracker, udid string, bdev BridgeDev) *Device {
@@ -408,6 +409,18 @@ func (self *Device) startProcs() {
 					app := left[:endPos]
 					fmt.Printf("app:%s\n", app)
 					self.EventCh <- DevEvent{action: DEV_APP_CHANGED, data: app}
+					//check if ignore app id present in config
+					//logging session active value
+					fmt.Println("Session Flag:", self.sessionActive)
+					if self.config.ignoreApps != nil && self.sessionActive {
+						for _, ignoreApp := range self.config.ignoreApps {
+							if ignoreApp == app {
+								fmt.Printf("Ignoring app:%s\n", app)
+								self.home()
+							}
+						}
+					}
+
 				}
 			}
 		} else if app == "dasd" {
