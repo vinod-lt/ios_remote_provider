@@ -115,6 +115,9 @@
         
     ]
     ignoreApps: [
-        "com.apple.Preferences"
+        "com.apple.Preferences",
+        "com.apple.mobilephone",
+        "com.apple.MobileSMS",
+        "com.apple.MobileAddressBook"
     ]
 }
