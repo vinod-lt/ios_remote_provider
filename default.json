@@ -86,6 +86,10 @@
             match: "Access the Camera"
             response: "OK"
         }
+        {
+            match: "use your approximate location"
+            response: "Allow Once"
+        }
     ]
     vidStartAlerts: [
         {
@@ -112,7 +116,10 @@
             match: "Access the Camera"
             response: "OK"
         }
-        
+        {
+            match: "use your approximate location"
+            response: "Allow Once"
+        }
     ]
     ignoreApps: [
         "com.apple.Preferences",

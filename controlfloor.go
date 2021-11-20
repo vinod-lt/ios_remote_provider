@@ -204,9 +204,23 @@ func (self *ControlFloor) connectVidChannel(udid string) *ws.Conn {
 	}
 
 	fmt.Printf("Connecting to CF imgStream\n")
-	conn, _, err := dialer.Dial(self.wsBase+"/provider/imgStream?udid="+udid, nil)
-	if err != nil {
-		panic(err)
+	var conn *ws.Conn
+	var resp *http.Response
+	for i := 0; i < 5; i++ {
+		var err error
+		conn, resp, err = dialer.Dial(self.wsBase+"/provider/imgStream?udid="+udid, nil)
+		if err != nil {
+			fmt.Printf("Error dialing:%s\n", err)
+			fmt.Printf("Status code: %d", resp.StatusCode)
+			resp.Body.Close()
+			bytes, err := ioutil.ReadAll(resp.Body)
+			if err == nil && len(bytes) > 0 {
+				fmt.Printf("Body: %s\n", string(bytes))
+			}
+			time.Sleep(time.Millisecond * 100)
+			continue
+		}
+		break
 	}
 
 	fmt.Printf("Connected CF imgStream\n")
@@ -319,10 +333,11 @@ func (self *ControlFloor) openWebsocket() {
 					udid := root.Get("udid").String()
 					x := root.Get("x").Int()
 					y := root.Get("y").Int()
+					time, _ := strconv.ParseFloat(root.Get("time").String(), 64)
 					go func() {
 						dev := self.DevTracker.getDevice(udid)
 						if dev != nil {
-							dev.longPress(x, y)
+							dev.longPress(x, y, time)
 						}
 					}()
 				} else if mType == "home" {
@@ -421,6 +436,18 @@ func (self *ControlFloor) openWebsocket() {
 					}()
 				} else if mType == "shutdown" {
 					do_shutdown(self.config, self.DevTracker)
+				} else if mType == "kill" {
+					udid := root.Get("udid").String()
+					bid := root.Get("bid").String()
+					dev := self.DevTracker.getDevice(udid)
+					dev.killBid(bid)
+					respondChan <- &CFR_Pong{id: id, text: "done"}
+				} else if mType == "launch" {
+					udid := root.Get("udid").String()
+					bid := root.Get("bid").String()
+					dev := self.DevTracker.getDevice(udid)
+					dev.launch(bid)
+					respondChan <- &CFR_Pong{id: id, text: "done"}
 				}
 			}
 		}
