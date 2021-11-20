@@ -608,8 +608,8 @@ func (self *Device) hardPress(x int, y int) {
 	self.cfa.hardPress(x, y)
 }
 
-func (self *Device) longPress(x int, y int) {
-	self.cfa.longPress(x, y)
+func (self *Device) longPress(x int, y int, time float64) {
+	self.cfa.longPress(x, y, time)
 }
 
 func (self *Device) home() {
@@ -647,4 +647,10 @@ func (self *Device) Refresh() string {
 }
 func (self *Device) Restart() string {
 	return self.cfa.Restart()
+}
+func (self *Device) killBid(bid string) {
+	self.bridge.KillBid(bid)
+}
+func (self *Device) launch(bid string) {
+	self.bridge.Launch(bid)
 }
