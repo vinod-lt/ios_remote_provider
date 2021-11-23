@@ -359,7 +359,14 @@ func (self *Device) sendBackupFrame() {
 func (self *Device) sendCFAFrame() {
     vidOut := self.vidOut
     if vidOut != nil {
+        start := time.Now().UnixMilli()
         pngData := self.cfa.Screenshot()
+        end := time.Now().UnixMilli()
+        diff := end - start
+        if diff < 300 {
+            toSleep := 300 - diff
+            time.Sleep( time.Duration( toSleep ) * time.Millisecond )
+        }
         //fmt.Printf("%d bytes\n", len( pngData ) )
         if( len( pngData ) > 0 ) {
             vidOut.WriteMessage( ws.BinaryMessage, pngData )
@@ -894,6 +901,10 @@ func (self *Device) keys( keys string ) {
         codes = append( codes, code )
     }
     self.cfa.keys( codes )
+}
+
+func (self *Device) text( text string ) {
+    self.cfa.text( text )
 }
 
 func (self *Device) source() string {

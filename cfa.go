@@ -483,6 +483,18 @@ func (self *CFA) typeText( codes []int ) {
     self.nngSocket.Recv()
 }
 
+func (self *CFA) text( text string ) {
+    json := fmt.Sprintf(`{
+        action: "typeText"
+        text: "%s"
+    }`, text )
+   
+    log.Info( "sending " + json )
+      
+    self.nngSocket.Send([]byte(json))
+    self.nngSocket.Recv()
+}
+
 func ( self *CFA ) swipe( x1 int, y1 int, x2 int, y2 int, delay float64 ) {
     log.Info( "Swiping:", x1, y1, x2, y2, delay )
     
