@@ -489,6 +489,18 @@ func (self *CFA) ElForceTouch(elId string, pressure int) {
 	self.nngSocket.Recv()
 }
 
+func (self *CFA) text(text string) {
+	json := fmt.Sprintf(`{
+        action: "typeText"
+        text: "%s"
+    }`, text)
+
+	log.Info("sending " + json)
+
+	self.nngSocket.Send([]byte(json))
+	self.nngSocket.Recv()
+}
+
 func (self *CFA) ElLongTouch(elId string) {
 	log.Info("elTouchAndHold", elId)
 	json := fmt.Sprintf(`{
