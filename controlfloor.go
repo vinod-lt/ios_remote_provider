@@ -237,7 +237,11 @@ func (self *ControlFloor) connectVidChannel(udid string) *ws.Conn {
 
 // Called from the device object
 func (self *ControlFloor) destroyVidChannel(udid string) {
-	vidConn := self.vidConns[udid]
+	vidConn, exists := self.vidConns[udid]
+
+	if !exists {
+		return
+	}
 
 	self.lock.Lock()
 	delete(self.vidConns, udid)
@@ -380,6 +384,16 @@ func (self *ControlFloor) openWebsocket() {
 						dev := self.DevTracker.getDevice(udid)
 						if dev != nil {
 							dev.keys(keys)
+						}
+						respondChan <- &CFR_Pong{id: id, text: "done"}
+					}()
+				} else if mType == "text" {
+					udid := root.Get("udid").String()
+					text := root.Get("text").String()
+					go func() {
+						dev := self.DevTracker.getDevice(udid)
+						if dev != nil {
+							dev.text(text)
 						}
 						respondChan <- &CFR_Pong{id: id, text: "done"}
 					}()
