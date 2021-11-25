@@ -22,6 +22,7 @@ type CDevice struct {
 	vidStartMethod      string
 	controlCenterMethod string
 	ccRecordingMethod   string
+	videoMode           string
 }
 
 type AlertConfig struct {

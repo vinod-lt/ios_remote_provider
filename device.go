@@ -19,6 +19,7 @@ const (
 	VID_APP
 	VID_BRIDGE
 	VID_WDA
+	VID_CFA
 	VID_ENABLE
 	VID_DISABLE
 	VID_END
@@ -64,6 +65,7 @@ type Device struct {
 	connected         bool
 	EventCh           chan DevEvent
 	BackupCh          chan BackupEvent
+	CFAFrameCh        chan BackupEvent
 	cfa               *CFA
 	wda               *WDA
 	cfaRunning        bool
@@ -106,6 +108,7 @@ func NewDevice(config *Config, devTracker *DeviceTracker, udid string, bdev Brid
 		cf:           devTracker.cf,
 		EventCh:      make(chan DevEvent),
 		BackupCh:     make(chan BackupEvent),
+		CFAFrameCh:   make(chan BackupEvent),
 		bridge:       bdev,
 		cfaRunning:   false,
 		versionParts: []int{0, 0, 0},
@@ -271,6 +274,45 @@ func (self *Device) startBackupFrameProvider() {
 	}()
 }
 
+func (self *Device) startCFAFrameProvider() {
+	go func() {
+		sending := false
+		for {
+			select {
+			case ev := <-self.CFAFrameCh:
+				action := ev.action
+				if action == VID_ENABLE {
+					sending = true
+					fmt.Printf("cfa frame provider - enabling\n")
+				} else if action == VID_DISABLE {
+					sending = false
+					fmt.Printf("cfa frame provider - disabled\n")
+				} else if action == VID_END {
+					break
+				}
+			default:
+			}
+			if sending {
+				self.sendCFAFrame()
+			} else {
+				time.Sleep(time.Millisecond * 100)
+			}
+		}
+	}()
+}
+
+func (self *Device) enableDefaultVideo() {
+	videoMode := self.devConfig.videoMode
+	if videoMode == "app" {
+		self.vidMode = VID_APP
+		self.vidStreamer.forceOneFrame()
+	} else if videoMode == "cfagent" {
+		self.vidMode = VID_CFA
+	} else {
+		// TODO error
+	}
+}
+
 func (self *Device) disableBackupVideo() {
 	fmt.Printf("Sending vid_disable\n")
 	self.BackupCh <- BackupEvent{action: VID_DISABLE}
@@ -288,6 +330,22 @@ func (self *Device) enableBackupVideo() {
 	self.backupActive = true
 }
 
+func (self *Device) disableCFAVideo() {
+	fmt.Printf("Sending vid_disable\n")
+	self.CFAFrameCh <- BackupEvent{action: VID_DISABLE}
+	fmt.Printf("Sent vid_disable\n")
+
+	self.enableDefaultVideo()
+}
+
+func (self *Device) enableCFAVideo() {
+	fmt.Printf("Sending vid_enable\n")
+	self.CFAFrameCh <- BackupEvent{action: VID_ENABLE}
+	fmt.Printf("Sent vid_enable\n")
+	self.vidMode = VID_CFA
+	self.backupActive = true
+}
+
 func (self *Device) sendBackupFrame() {
 	if self.vidOut != nil {
 		fmt.Printf("Fetching frame - ")
@@ -296,6 +354,26 @@ func (self *Device) sendBackupFrame() {
 		if len(pngData) > 0 {
 			self.vidOut.WriteMessage(ws.BinaryMessage, pngData)
 		}
+	}
+}
+
+func (self *Device) sendCFAFrame() {
+	vidOut := self.vidOut
+	if vidOut != nil {
+		start := time.Now().UnixMilli()
+		pngData := self.cfa.Screenshot()
+		end := time.Now().UnixMilli()
+		diff := end - start
+		if diff < 300 {
+			toSleep := 300 - diff
+			time.Sleep(time.Duration(toSleep) * time.Millisecond)
+		}
+		//fmt.Printf("%d bytes\n", len( pngData ) )
+		if len(pngData) > 0 {
+			vidOut.WriteMessage(ws.BinaryMessage, pngData)
+		}
+	} else {
+		time.Sleep(time.Millisecond * 100)
 	}
 }
 
@@ -345,6 +423,7 @@ func (self *Device) startProcs() {
 	}
 
 	self.startBackupFrameProvider() // just the timed loop
+	self.startCFAFrameProvider()
 	self.backupVideo = self.bridge.NewBackupVideo(
 		self.backupVideoPort,
 		func(interface{}) {}, // onStop
@@ -434,19 +513,26 @@ func (self *Device) startProcs() {
 
 func (self *Device) startProcs2() {
 	self.appStreamStopChan = make(chan bool)
-	self.vidStreamer = NewAppStream(
-		self.appStreamStopChan,
-		self.vidControlPort,
-		self.vidPort,
-		self.vidLogPort,
-		self.udid,
-		self)
-	self.vidStreamer.mainLoop()
+
+	videoMode := self.devConfig.videoMode
+	if videoMode == "app" {
+		self.vidStreamer = NewAppStream(
+			self.appStreamStopChan,
+			self.vidControlPort,
+			self.vidPort,
+			self.vidLogPort,
+			self.udid,
+			self)
+		self.vidStreamer.mainLoop()
+	} else if videoMode == "cfagent" {
+		// Nothing todo
+	} else {
+		// TODO error
+	}
 
 	// Start WDA
 	self.wda = NewWDA(self.config, self.devTracker, self)
 }
-
 func (self *Device) vidAppIsAlive() bool {
 	vidPid := self.bridge.GetPid(self.config.vidAppExtBid)
 	if vidPid != 0 {
@@ -653,4 +739,7 @@ func (self *Device) killBid(bid string) {
 }
 func (self *Device) launch(bid string) {
 	self.bridge.Launch(bid)
+}
+func (self *Device) text(text string) {
+	self.cfa.text(text)
 }
