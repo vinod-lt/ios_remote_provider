@@ -317,9 +317,8 @@ func (self *Device) disableBackupVideo() {
 	fmt.Printf("Sending vid_disable\n")
 	self.BackupCh <- BackupEvent{action: VID_DISABLE}
 	fmt.Printf("Sent vid_disable\n")
-	self.vidMode = VID_APP
 	self.backupActive = false
-	self.vidStreamer.forceOneFrame()
+	self.enableDefaultVideo()
 }
 
 func (self *Device) enableBackupVideo() {
