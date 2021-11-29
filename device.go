@@ -203,6 +203,7 @@ func (self *Device) onCfaReady() {
 			self.enableCFAVideo()
 		} else {
 			// TODO error
+			fmt.Println("Unknown video mode: " + videoMode)
 		}
 
 		self.startProcs2()
@@ -552,7 +553,7 @@ func (self *Device) vidAppIsAlive() bool {
 	return false
 }
 
-func (self *Device) enableVideo() {
+func (self *Device) enableAppVideo() {
 	// check if video app is running
 	vidPid := self.bridge.GetPid(self.config.vidAppExtBid)
 
@@ -660,7 +661,7 @@ func (self *Device) shutdownVidStream() {
 	if self.vidOut != nil {
 		self.stopVidStream()
 	}
-	ext_id := self.bridge.GetPid("vidstream_ext")
+	ext_id := self.bridge.GetPid("Connect")
 	if ext_id != 0 {
 		self.bridge.Kill(ext_id)
 	}

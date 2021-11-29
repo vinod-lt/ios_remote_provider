@@ -851,17 +851,15 @@ func (self *CFA) StartBroadcastStream(appName string, bid string, devConfig *CDe
 		toSelector := self.GetEl("button", "Broadcast Selector", false, 5)
 		self.ElClick(toSelector)
 
-		startBtn := self.GetEl("button", "Start Broadcast", true, 5)
-		if startBtn == "" {
-			startBtn := self.GetEl("staticText", "Start Broadcast", false, 2)
-			if startBtn == "" {
-				startBtn := self.GetEl("button", "Start Broadcast", false, 2)
-				if startBtn == "" {
-					fmt.Printf("Error! Could not fetch Start Broadcast button\n")
-				}
-			}
+		os := self.dev.versionParts[0]
+		if os >= 14 {
+			startBtn := self.GetEl("button", "Start Broadcast", true, 5)
+			self.ElClick(startBtn)
+
+		} else {
+			startBtn := self.GetEl("staticText", "Start Broadcast", false, 5)
+			self.ElClick(startBtn)
 		}
-		self.ElClick(startBtn)
 	} else if method == "controlCenter" {
 		fmt.Printf("Starting vidApp through control center\n")
 		time.Sleep(time.Second * 2)

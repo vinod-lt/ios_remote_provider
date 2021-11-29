@@ -188,7 +188,7 @@ func readDevs(root uj.JNode) map[string]CDevice {
 			wdaMethod := ""
 			ccRecordingMethod := "longTouch"
 			tunnelMethod := "go-ios"
-			videoMode := "cfagent"
+			videoMode := "app"
 			if widthNode != nil {
 				uiWidth = widthNode.Int()
 			}
