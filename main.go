@@ -544,6 +544,8 @@ func runMain(cmd *uc.Cmd) {
 		}
 	}
 
+	openDbConnection()
+
 	devTracker := NewDeviceTracker(config, true, ids)
 	coro_sigterm(config, devTracker)
 

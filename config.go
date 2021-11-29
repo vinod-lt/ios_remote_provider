@@ -188,6 +188,7 @@ func readDevs(root uj.JNode) map[string]CDevice {
 			wdaMethod := ""
 			ccRecordingMethod := "longTouch"
 			tunnelMethod := "go-ios"
+			videoMode := "cfagent"
 			if widthNode != nil {
 				uiWidth = widthNode.Int()
 			}
@@ -223,6 +224,10 @@ func readDevs(root uj.JNode) map[string]CDevice {
 			if tunnelMethodNode != nil {
 				tunnelMethod = tunnelMethodNode.String()
 			}
+			videoModeNode := devNode.Get("videoMode")
+			if videoModeNode != nil {
+				videoMode = videoModeNode.String()
+			}
 
 			dev := CDevice{
 				udid:                udid,
@@ -235,6 +240,7 @@ func readDevs(root uj.JNode) map[string]CDevice {
 				controlCenterMethod: controlCenterMethod,
 				ccRecordingMethod:   ccRecordingMethod,
 				tunnelMethod:        tunnelMethod,
+				videoMode:           videoMode,
 			}
 			devs[udid] = dev
 		})
