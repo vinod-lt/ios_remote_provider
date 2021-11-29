@@ -487,7 +487,11 @@ func (self *Device) startProcs() {
                     left := msg[after:]
                     endPos := strings.Index( left, ">" )
                     app := left[:endPos]
-                    fmt.Printf("app:%s\n", app )
+                    pidStr := left[endPos+2:]
+                    pidEndPos := strings.Index( pidStr, "]" )
+                    pidStr = pidStr[:pidEndPos]
+                    pid, _ := strconv.ParseUint( pidStr, 10, 64 )
+                    fmt.Printf("app - bid:%s pid:%d\n", app, pid )
                     allowed := true
                     for _,restrictedApp := range self.restrictedApps {
                         if restrictedApp == app { allowed = false }
@@ -495,7 +499,7 @@ func (self *Device) startProcs() {
                     if allowed {
                         self.EventCh <- DevEvent{ action: DEV_APP_CHANGED, data: app }
                     } else {
-                        self.bridge.KillBid( app )
+                        self.bridge.Kill( pid )
                     }
                 }
             }
