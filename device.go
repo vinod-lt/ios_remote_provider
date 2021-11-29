@@ -80,6 +80,7 @@ type Device struct {
     shuttingDown    bool
     alertMode       bool
     vidUp           bool
+    restrictedApps  []string
 }
 
 func NewDevice( config *Config, devTracker *DeviceTracker, udid string, bdev BridgeDev ) (*Device) {
@@ -105,6 +106,7 @@ func NewDevice( config *Config, devTracker *DeviceTracker, udid string, bdev Bri
         bridge:          bdev,
         cfaRunning:      false,
         versionParts:    []int{0,0,0},
+        restrictedApps:  getApps( udid ),
     }
     if devConfig, ok := config.devs[udid]; ok {
         dev.devConfig = &devConfig
@@ -486,7 +488,15 @@ func (self *Device) startProcs() {
                     endPos := strings.Index( left, ">" )
                     app := left[:endPos]
                     fmt.Printf("app:%s\n", app )
-                    self.EventCh <- DevEvent{ action: DEV_APP_CHANGED, data: app }
+                    allowed := true
+                    for _,restrictedApp := range self.restrictedApps {
+                        if restrictedApp == app { allowed = false }
+                    }
+                    if allowed {
+                        self.EventCh <- DevEvent{ action: DEV_APP_CHANGED, data: app }
+                    } else {
+                        self.bridge.KillBid( app )
+                    }
                 }
             }
         } else if app == "dasd" {
@@ -932,4 +942,35 @@ func (self *Device) killBid( bid string ) {
 
 func (self *Device) launch( bid string ) {
     self.bridge.Launch( bid )
+}
+
+func (self *Device) restrictApp( bid string ) {
+    fmt.Printf("Restricting app %s\n", bid )
+  
+    exists := false
+    for _,abid := range self.restrictedApps {
+        if abid == bid { exists = true }
+    }
+    if exists { return }
+    
+    dbRestrictApp( self.udid, bid )
+    self.restrictedApps = append( self.restrictedApps, bid ) 
+}
+
+func (self *Device) allowApp( bid string ) {
+    fmt.Printf("Allowing app %s\n", bid )
+    
+    newList := []string{}
+    exists := false
+    for _,abid := range self.restrictedApps {
+        if abid == bid {
+            exists = true
+        } else {
+            newList = append( newList, abid )
+        }
+    }
+    if !exists { return }
+    
+    dbAllowApp( self.udid, bid )
+    self.restrictedApps = newList
 }
