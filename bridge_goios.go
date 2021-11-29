@@ -12,10 +12,12 @@ import (
 	"time"
 
 	"github.com/danielpaulus/go-ios/ios"
+	instruments "github.com/danielpaulus/go-ios/ios/instruments"
 	screenshotr "github.com/danielpaulus/go-ios/ios/screenshotr"
 	syslog "github.com/danielpaulus/go-ios/ios/syslog"
 	uj "github.com/nanoscopic/ujsonin/v2/mod"
 	log "github.com/sirupsen/logrus"
+	//dtx "github.com/danielpaulus/go-ios/ios/dtx_codec"
 )
 
 type GIBridge struct {
@@ -35,6 +37,10 @@ type GIDev struct {
 	config      *CDevice
 	device      *Device
 	goIosDevice ios.DeviceEntry
+
+	procControl    *instruments.ProcessControl
+	devInfoService *instruments.DeviceInfoService
+
 	logStopChan chan bool
 	rx          *regexp.Regexp
 }
@@ -338,44 +344,91 @@ func (self *GIBridge) GetDevs(config *Config) []string {
 	return res
 }
 
-func (self *GIDev) GetPid(appname string) uint64 {
-	json, err := exec.Command(self.bridge.cli,
-		[]string{
-			"ps",
-			"--udid", self.udid,
-		}...).Output()
+/*func connectInstruments( device ios.DeviceEntry ) *dtx.Connection {
+    conn, err := dtx.NewConnection( device, "com.apple.instruments.remoteserver" )
+    if err != nil {
+        conn, err = dtx.NewConnection( device, "com.apple.instruments.remoteserver.DVTSecureSocketProxy" )
+        if err != nil { return nil }
+    }
+    return conn
+}*/
 
+func (self *GIDev) GetPid(appname string) uint64 {
+	if self.devInfoService == nil {
+		//if self.instrumentsConn == nil {
+		//    self.instrumentsConn = connectInstruments( self.goIosDevice )
+		//}
+		//self.devInfoChan = self.instrumentsConn.RequestChannelIdentifier( "com.apple.instruments.server.services.deviceinfo", nil )
+		var err error
+		self.devInfoService, err = instruments.NewDeviceInfoService(self.goIosDevice)
+		if err != nil {
+			return 0
+		}
+	}
+
+	procs, err := self.devInfoService.ProcessList()
 	if err != nil {
-		fmt.Printf("Could not find pid for %s; err=%s, json=%s\n", appname, err, json)
 		return 0
 	}
 
-	root, _ := uj.Parse([]byte("{\"procs\":" + string(json) + "}"))
-
-	pid := 0
-	root.Get("procs").ForEach(func(proc uj.JNode) {
-		name := proc.Get("Name").String()
-		if name != appname {
-			return
+	for _, proc := range procs {
+		if proc.Name == appname {
+			return proc.Pid
 		}
-		pid = proc.Get("Pid").Int()
-	})
-
-	fmt.Printf("Found pid %d for %s\n", pid, appname)
-	return uint64(pid)
+	}
+	return 0
 }
+
+/*func (self *GIDev) GetPid( appname string ) uint64 {
+    json, err := exec.Command( self.bridge.cli,
+        []string{
+            "ps",
+            "--udid", self.udid,
+        }... ).Output()
+
+    if err != nil {
+        fmt.Printf("Could not find pid for %s; err=%s, json=%s\n", appname, err, json )
+        return 0
+    }
+
+    root, _ := uj.Parse( []byte( "{\"procs\":" + string(json) + "}" ) )
+
+    pid := 0
+    root.Get("procs").ForEach( func( proc uj.JNode ) {
+        name := proc.Get("Name").String()
+        if name != appname { return }
+        pid = proc.Get("Pid").Int()
+    } )
+
+    fmt.Printf("Found pid %d for %s\n", pid, appname )
+    return uint64( pid )
+}*/
 
 func (self *GIDev) Kill(pid uint64) {
 	fmt.Printf("Killing process id %d\n", pid)
 
-	exec.Command(self.bridge.cli,
-		[]string{
-			"killid", fmt.Sprintf("%d", pid),
-			"--udid", self.udid,
-		}...,
-	).Output()
+	if self.procControl == nil {
+		self.procControl, _ = instruments.NewProcessControl(self.goIosDevice)
+	}
+	self.procControl.KillProcess(pid)
 }
 
+/*func (self *GIDev) Kill( pid uint64 ) {
+    fmt.Printf("Killing process id %d\n", pid )
+
+    exec.Command( self.bridge.cli,
+        []string{
+            "killid", fmt.Sprintf("%d", pid ),
+            "--udid", self.udid,
+        }...
+    ).Output()
+}*/
+
+/*func (self *GIDev) KillBid( bid string ) {
+    pid := self.GetPidByBid( bid )
+    if pid == 0 { return }
+    self.Kill( pid )
+}*/
 func (self *GIDev) KillBid(bid string) {
 	fmt.Printf("Killing bundle id %s\n", bid)
 
