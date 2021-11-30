@@ -344,7 +344,7 @@ func (self *GIBridge) GetDevs( config *Config ) []string {
     return conn
 }*/
 
-func (self *GIDev) GetPid( appname string ) uint64 {
+/*func (self *GIDev) GetPid( appname string ) uint64 {
     if self.devInfoService == nil {
         //if self.instrumentsConn == nil {
         //    self.instrumentsConn = connectInstruments( self.goIosDevice )
@@ -364,9 +364,9 @@ func (self *GIDev) GetPid( appname string ) uint64 {
         }
     }
     return 0
-}
+}*/
 
-/*func (self *GIDev) GetPid( appname string ) uint64 {
+func (self *GIDev) GetPid( appname string ) uint64 {
     json, err := exec.Command( self.bridge.cli,
         []string{
             "ps",
@@ -389,7 +389,7 @@ func (self *GIDev) GetPid( appname string ) uint64 {
     
     fmt.Printf("Found pid %d for %s\n", pid, appname )
     return uint64( pid )
-}*/
+}
 
 /*func (self *GIDev) Kill( pid uint64 ) {
     fmt.Printf("Killing process id %d\n", pid )
