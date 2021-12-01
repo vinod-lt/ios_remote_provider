@@ -33,7 +33,7 @@
         "uiWidth": 414,
         "uiHeight": 896,
         "wdaMethod": "go-ios",
-        "cfaMethod":"manual"
+        "cfaMethod":"go-ios"
       },
       {
         "udid": "328d2fc4e39a54c86a81671b4f901b23ab50379f",
