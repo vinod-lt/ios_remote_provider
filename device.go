@@ -8,6 +8,7 @@ import (
 	"time"
 
 	ws "github.com/gorilla/websocket"
+	uj "github.com/nanoscopic/ujsonin/v2/mod"
 	log "github.com/sirupsen/logrus"
 	//uj "github.com/nanoscopic/ujsonin/v2/mod"
 	//"go.nanomsg.org/mangos/v3"
@@ -84,7 +85,8 @@ type Device struct {
 	shuttingDown      bool
 	alertMode         bool
 	vidUp             bool
-	sessionActive     bool // if session is actively used
+	sessionActive     bool // if session is actively used LT change
+	restrictedApps    []string
 }
 
 func NewDevice(config *Config, devTracker *DeviceTracker, udid string, bdev BridgeDev) *Device {
@@ -100,19 +102,19 @@ func NewDevice(config *Config, devTracker *DeviceTracker, udid string, bdev Brid
 		vidControlPort:  devTracker.getPort(),
 		backupVideoPort: devTracker.getPort(),
 		//mjpegVideoPort:  devTracker.getPort(),
-		backupActive: false,
-		config:       config,
-		udid:         udid,
-		lock:         &sync.Mutex{},
-		process:      make(map[string]*GenericProc),
-		cf:           devTracker.cf,
-		EventCh:      make(chan DevEvent),
-		BackupCh:     make(chan BackupEvent),
-		CFAFrameCh:   make(chan BackupEvent),
-		bridge:       bdev,
-		cfaRunning:   false,
-		versionParts: []int{0, 0, 0},
-		//wdaRunning:      false,
+		backupActive:   false,
+		config:         config,
+		udid:           udid,
+		lock:           &sync.Mutex{},
+		process:        make(map[string]*GenericProc),
+		cf:             devTracker.cf,
+		EventCh:        make(chan DevEvent),
+		BackupCh:       make(chan BackupEvent),
+		CFAFrameCh:     make(chan BackupEvent),
+		bridge:         bdev,
+		cfaRunning:     false,
+		versionParts:   []int{0, 0, 0},
+		restrictedApps: getApps(udid),
 	}
 	if devConfig, ok := config.devs[udid]; ok {
 		dev.devConfig = &devConfig
@@ -143,7 +145,6 @@ func (self *Device) releasePorts() {
 	dt.freePort(self.vidLogPort)
 	dt.freePort(self.vidControlPort)
 	dt.freePort(self.backupVideoPort)
-	//dt.freePort( self.mjpegVideoPort )
 }
 
 func (self *Device) startProc(proc *GenericProc) {
@@ -195,7 +196,15 @@ func (self *Device) onCfaReady() {
 	// start video streaming
 
 	self.forwardVidPorts(self.udid, func() {
-		self.enableVideo()
+		videoMode := self.devConfig.videoMode
+		if videoMode == "app" {
+			self.enableAppVideo()
+		} else if videoMode == "cfagent" {
+			self.enableCFAVideo()
+		} else {
+			// TODO error
+			fmt.Println("Unknown video mode: " + videoMode)
+		}
 
 		self.startProcs2()
 	})
@@ -266,7 +275,6 @@ func (self *Device) startBackupFrameProvider() {
 			}
 			if sending {
 				self.sendBackupFrame()
-				time.Sleep(time.Millisecond * 500)
 			} else {
 				time.Sleep(time.Millisecond * 100)
 			}
@@ -346,13 +354,16 @@ func (self *Device) enableCFAVideo() {
 }
 
 func (self *Device) sendBackupFrame() {
-	if self.vidOut != nil {
+	vidOut := self.vidOut
+	if vidOut != nil {
 		fmt.Printf("Fetching frame - ")
 		pngData := self.backupVideo.GetFrame()
 		fmt.Printf("%d bytes\n", len(pngData))
 		if len(pngData) > 0 {
-			self.vidOut.WriteMessage(ws.BinaryMessage, pngData)
+			vidOut.WriteMessage(ws.BinaryMessage, pngData)
 		}
+	} else {
+		time.Sleep(time.Millisecond * 100)
 	}
 }
 
@@ -485,20 +496,22 @@ func (self *Device) startProcs() {
 					left := msg[after:]
 					endPos := strings.Index(left, ">")
 					app := left[:endPos]
-					fmt.Printf("app:%s\n", app)
-					self.EventCh <- DevEvent{action: DEV_APP_CHANGED, data: app}
-					//check if ignore app id present in config
-					//logging session active value
-					fmt.Println("Session Flag:", self.sessionActive)
-					if self.config.ignoreApps != nil && self.sessionActive {
-						for _, ignoreApp := range self.config.ignoreApps {
-							if ignoreApp == app {
-								fmt.Printf("Ignoring app:%s\n", app)
-								self.home()
-							}
+					pidStr := left[endPos+2:]
+					pidEndPos := strings.Index(pidStr, "]")
+					pidStr = pidStr[:pidEndPos]
+					pid, _ := strconv.ParseUint(pidStr, 10, 64)
+					fmt.Printf("app - bid:%s pid:%d\n", app, pid)
+					allowed := true
+					for _, restrictedApp := range self.restrictedApps {
+						if restrictedApp == app {
+							allowed = false
 						}
 					}
-
+					if allowed {
+						self.EventCh <- DevEvent{action: DEV_APP_CHANGED, data: app}
+					} else {
+						self.bridge.Kill(pid)
+					}
 				}
 			}
 		} else if app == "dasd" {
@@ -540,7 +553,7 @@ func (self *Device) vidAppIsAlive() bool {
 	return false
 }
 
-func (self *Device) enableVideo() {
+func (self *Device) enableAppVideo() {
 	// check if video app is running
 	vidPid := self.bridge.GetPid(self.config.vidAppExtBid)
 
@@ -648,7 +661,7 @@ func (self *Device) shutdownVidStream() {
 	if self.vidOut != nil {
 		self.stopVidStream()
 	}
-	ext_id := self.bridge.GetPid("vidstream_ext")
+	ext_id := self.bridge.GetPid("Connect")
 	if ext_id != 0 {
 		self.bridge.Kill(ext_id)
 	}
@@ -689,6 +702,14 @@ func (self *Device) clickAt(x int, y int) {
 	self.cfa.clickAt(x, y)
 }
 
+func (self *Device) mouseDown(x int, y int) {
+	self.cfa.mouseDown(x, y)
+}
+
+func (self *Device) mouseUp(x int, y int) {
+	self.cfa.mouseUp(x, y)
+}
+
 func (self *Device) hardPress(x int, y int) {
 	self.cfa.hardPress(x, y)
 }
@@ -699,6 +720,210 @@ func (self *Device) longPress(x int, y int, time float64) {
 
 func (self *Device) home() {
 	self.cfa.home()
+}
+
+func findNodeWithAtt(cur uj.JNode, att string, label string) uj.JNode {
+	lNode := cur.Get(att)
+	if lNode != nil {
+		if lNode.String() == label {
+			return cur
+		}
+	}
+
+	cNode := cur.Get("c")
+	if cNode == nil {
+		return nil
+	}
+
+	var gotIt uj.JNode
+	cNode.ForEach(func(child uj.JNode) {
+		res := findNodeWithAtt(child, att, label)
+		if res != nil {
+			gotIt = res
+		}
+	})
+	return gotIt
+}
+
+// Assumes AssistiveTouch is enabled already
+func (self *Device) openAssistiveTouch(pid int32) int {
+	y := 0
+	i := 0
+	for {
+		i++
+		if i > 10 {
+			fmt.Printf("AssistiveTouch icon did not appear\n")
+			return 0
+		}
+		json := self.cfa.ElByPid(int(pid), true)
+		// Todo; element may not be there
+		root, _ := uj.Parse([]byte(json))
+		btnNode := findNodeWithAtt(root, "label", "AssistiveTouch menu")
+		if btnNode == nil {
+			time.Sleep(time.Millisecond * 100)
+			continue
+		}
+		x := btnNode.Get("x").Int()
+		y = btnNode.Get("y").Int()
+		x += 20
+		y += 20
+		time.Sleep(time.Millisecond * 100)
+		self.cfa.clickAt(x/2, y/2)
+		break
+	}
+
+	return y
+}
+
+func (self *Device) taskSwitcher() {
+	//self.cfa.Siri("activate assistivetouch")
+
+	self.enableAssistiveTouch()
+
+	_, pid := self.isAssistiveTouchEnabled()
+
+	y := self.openAssistiveTouch(pid)
+
+	i := 0
+	for {
+		i++
+		if i > 10 {
+			fmt.Printf("Could not find multitasking button")
+			return
+		}
+
+		// TODO don't use hardcoded screen center
+		atJson := self.cfa.AppAtPoint(187, y/2, true, true, false)
+		fmt.Println(atJson)
+
+		root2, _ := uj.Parse([]byte(atJson))
+		taskNode := findNodeWithAtt(root2, "label", "Multitasking")
+		if taskNode == nil {
+			time.Sleep(time.Millisecond * 100)
+			continue
+		}
+		x2 := taskNode.Get("x").Int()
+		y2 := taskNode.Get("y").Int()
+		x2 += 20
+		y2 += 20
+		time.Sleep(time.Millisecond * 200)
+		self.cfa.clickAt(x2/2, y2/2)
+		break
+	}
+
+	// Todo: Wait for task switcher to actually appear
+	//time.Sleep( time.Millisecond * 600 )
+	//self.cfa.GetEl("other", "SBSwitcherWindow", false, 1 )
+	i = 0
+	for {
+		i++
+		if i > 20 {
+			fmt.Printf("Task Switcher did not appear\n")
+			return
+		}
+		centerScreenJson := self.cfa.AppAtPoint(187, 333, true, true, true)
+		root3, _ := uj.Parse([]byte(centerScreenJson))
+		closeBox := findNodeWithAtt(root3, "id", "appCloseBox")
+		if closeBox != nil {
+			break
+		}
+		time.Sleep(time.Millisecond * 100)
+		//fmt.Printf("Task switcher appeared\n")
+	}
+
+	self.disableAssistiveTouch()
+}
+
+func (self *Device) shake() {
+	self.enableAssistiveTouch()
+
+	self.disableAssistiveTouch()
+}
+
+func (self *Device) cc() {
+	self.cfa.OpenControlCenter()
+}
+
+func (self *Device) isAssistiveTouchEnabled() (bool, int32) {
+	var pid int32
+	procs := self.bridge.ps()
+	for _, proc := range procs {
+		if proc.name == "assistivetouchd" {
+			pid = proc.pid
+			break
+		}
+	}
+	if pid != 0 {
+		return true, pid
+	}
+	return false, 0
+}
+
+func (self *Device) enableAssistiveTouch() {
+	enabled, _ := self.isAssistiveTouchEnabled()
+	if !enabled {
+		self.toggleAssistiveTouch()
+	}
+
+	/*i := 0
+	  var pid int32
+	  for {
+	      i++
+	      if i> 20 { // Wait up to 4 seconds for it to start
+	          fmt.Printf("AssistiveTouch process did not start")
+	          return
+	      }
+
+	      procs := self.bridge.ps()
+	      for _,proc := range procs {
+	          if proc.name == "assistivetouchd" {
+	              pid = proc.pid
+	              break
+	          }
+	      }
+	      if pid != 0 { break }
+	      time.Sleep( time.Millisecond * 200 )
+	  }*/
+}
+
+func (self *Device) disableAssistiveTouch() {
+	enabled, _ := self.isAssistiveTouchEnabled()
+	if enabled {
+		self.toggleAssistiveTouch()
+	}
+
+	/*i = 0
+	  for {
+	      i++
+	      if i > 20 { // Wait up to 4 seconds for it to stop
+	          fmt.Printf("AssistiveTouch process did not stop")
+	          return
+	      }
+
+	      procs := self.bridge.ps()
+	      pid = 0
+	      for _,proc := range procs {
+	          if proc.name == "assistivetouchd" {
+	              pid = proc.pid
+	              break
+	          }
+	      }
+	      if pid == 0 { break }
+	      time.Sleep( time.Millisecond * 200 )
+	  }*/
+}
+
+func (self *Device) toggleAssistiveTouch() {
+	cfa := self.cfa
+	self.cc()
+	shortcutsBtn := cfa.GetEl("button", "Accessibility Shortcuts", true, 2)
+	cfa.ElClick(shortcutsBtn)
+	atBtn := cfa.GetEl("button", "AssistiveTouch", true, 2)
+	cfa.ElClick(atBtn)
+	time.Sleep(time.Millisecond * 100)
+	cfa.home()
+	time.Sleep(time.Millisecond * 300)
+	cfa.home()
 }
 
 func (self *Device) iohid(page int, code int) {
@@ -720,6 +945,10 @@ func (self *Device) keys(keys string) {
 	self.cfa.keys(codes)
 }
 
+func (self *Device) text(text string) {
+	self.cfa.text(text)
+}
+
 func (self *Device) source() string {
 	return self.cfa.SourceJson()
 }
@@ -727,18 +956,69 @@ func (self *Device) source() string {
 func (self *Device) WifiIp() string {
 	return self.cfa.WifiIp()
 }
+
+func (self *Device) AppAtPoint(x int, y int) string {
+	return self.cfa.AppAtPoint(x, y, false, false, false)
+}
+
+func (self *Device) WifiMac() string {
+	info := self.bridge.info([]string{"WiFiAddress"})
+	val, ok := info["WiFiAddress"]
+	if ok {
+		return val
+	}
+	return "unknown"
+}
+
+func (self *Device) killBid(bid string) {
+	self.bridge.KillBid(bid)
+}
+
+func (self *Device) launch(bid string) {
+	self.bridge.Launch(bid)
+}
+
+func (self *Device) restrictApp(bid string) {
+	fmt.Printf("Restricting app %s\n", bid)
+
+	exists := false
+	for _, abid := range self.restrictedApps {
+		if abid == bid {
+			exists = true
+		}
+	}
+	if exists {
+		return
+	}
+
+	dbRestrictApp(self.udid, bid)
+	self.restrictedApps = append(self.restrictedApps, bid)
+}
+
+func (self *Device) allowApp(bid string) {
+	fmt.Printf("Allowing app %s\n", bid)
+
+	newList := []string{}
+	exists := false
+	for _, abid := range self.restrictedApps {
+		if abid == bid {
+			exists = true
+		} else {
+			newList = append(newList, abid)
+		}
+	}
+	if !exists {
+		return
+	}
+
+	dbAllowApp(self.udid, bid)
+	self.restrictedApps = newList
+}
+
+//LT Changes
 func (self *Device) Refresh() string {
 	return self.cfa.Refresh()
 }
 func (self *Device) Restart() string {
 	return self.cfa.Restart()
-}
-func (self *Device) killBid(bid string) {
-	self.bridge.KillBid(bid)
-}
-func (self *Device) launch(bid string) {
-	self.bridge.Launch(bid)
-}
-func (self *Device) text(text string) {
-	self.cfa.text(text)
 }

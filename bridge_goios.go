@@ -12,10 +12,12 @@ import (
 	"time"
 
 	"github.com/danielpaulus/go-ios/ios"
+	instruments "github.com/danielpaulus/go-ios/ios/instruments"
 	screenshotr "github.com/danielpaulus/go-ios/ios/screenshotr"
 	syslog "github.com/danielpaulus/go-ios/ios/syslog"
 	uj "github.com/nanoscopic/ujsonin/v2/mod"
 	log "github.com/sirupsen/logrus"
+	//dtx "github.com/danielpaulus/go-ios/ios/dtx_codec"
 )
 
 type GIBridge struct {
@@ -35,6 +37,10 @@ type GIDev struct {
 	config      *CDevice
 	device      *Device
 	goIosDevice ios.DeviceEntry
+
+	procControl    *instruments.ProcessControl
+	devInfoService *instruments.DeviceInfoService
+
 	logStopChan chan bool
 	rx          *regexp.Regexp
 }
@@ -338,6 +344,37 @@ func (self *GIBridge) GetDevs(config *Config) []string {
 	return res
 }
 
+/*func connectInstruments( device ios.DeviceEntry ) *dtx.Connection {
+    conn, err := dtx.NewConnection( device, "com.apple.instruments.remoteserver" )
+    if err != nil {
+        conn, err = dtx.NewConnection( device, "com.apple.instruments.remoteserver.DVTSecureSocketProxy" )
+        if err != nil { return nil }
+    }
+    return conn
+}*/
+
+/*func (self *GIDev) GetPid( appname string ) uint64 {
+    if self.devInfoService == nil {
+        //if self.instrumentsConn == nil {
+        //    self.instrumentsConn = connectInstruments( self.goIosDevice )
+        //}
+        //self.devInfoChan = self.instrumentsConn.RequestChannelIdentifier( "com.apple.instruments.server.services.deviceinfo", nil )
+        var err error
+        self.devInfoService, err = instruments.NewDeviceInfoService( self.goIosDevice )
+        if err != nil { return 0 }
+    }
+
+    procs, err := self.devInfoService.ProcessList()
+    if err != nil { return 0 }
+
+    for _,proc := range procs {
+        if proc.Name == appname {
+            return proc.Pid
+        }
+    }
+    return 0
+}*/
+
 func (self *GIDev) GetPid(appname string) uint64 {
 	json, err := exec.Command(self.bridge.cli,
 		[]string{
@@ -365,6 +402,15 @@ func (self *GIDev) GetPid(appname string) uint64 {
 	return uint64(pid)
 }
 
+/*func (self *GIDev) Kill( pid uint64 ) {
+    fmt.Printf("Killing process id %d\n", pid )
+
+    if self.procControl == nil {
+        self.procControl, _ = instruments.NewProcessControl( self.goIosDevice )
+    }
+    self.procControl.KillProcess( pid )
+}*/
+
 func (self *GIDev) Kill(pid uint64) {
 	fmt.Printf("Killing process id %d\n", pid)
 
@@ -376,6 +422,11 @@ func (self *GIDev) Kill(pid uint64) {
 	).Output()
 }
 
+/*func (self *GIDev) KillBid( bid string ) {
+    pid := self.GetPidByBid( bid )
+    if pid == 0 { return }
+    self.Kill( pid )
+}*/
 func (self *GIDev) KillBid(bid string) {
 	fmt.Printf("Killing bundle id %s\n", bid)
 
@@ -481,6 +532,29 @@ func (self *GIDev) info(names []string) map[string]string {
 	return mapped
 }
 
+/*func (self *GIDev) info( names []string ) map[string]string {
+    mapped := make( map[string]string )
+
+    lockdownConnection, err := ios.ConnectLockdownWithSession( self.goIosDevice )
+    if err != nil {
+        fmt.Printf("lockdown connection err:%s", err )
+        return mapped
+    }
+    defer lockdownConnection.Close()
+
+    for _,name := range names {
+        value, err := lockdownConnection.GetValue( name )
+        if err == nil {
+            strVal, ok := value.(string)
+            if ok {
+                mapped[ name ] = strVal
+            }
+        }
+    }
+
+    return mapped
+}*/
+
 func (self *GIDev) gestalt(names []string) map[string]string {
 	mapped := make(map[string]string)
 	args := []string{
@@ -528,7 +602,23 @@ func (self *GIDev) gestaltnode(names []string) map[string]uj.JNode {
 }
 
 func (self *GIDev) ps() []iProc {
-	return []iProc{}
+	args := []string{
+		"ps",
+		"--udid", self.udid,
+	}
+	fmt.Printf("Running %s %s\n", self.bridge.cli, args)
+	json, _ := exec.Command(self.bridge.cli, args...).Output()
+	//fmt.Printf("json:%s\n",json)
+	root, _ := uj.Parse(json)
+
+	procs := []iProc{}
+	root.ForEach(func(procNode uj.JNode) {
+		procs = append(procs, iProc{
+			pid:  int32(procNode.Get("Pid").Int()),
+			name: procNode.Get("Name").String(),
+		})
+	})
+	return procs
 }
 
 func (self *GIDev) screenshot() Screenshot {
@@ -1039,4 +1129,10 @@ func (self *GIDev) SetConfig(config *CDevice) {
 
 func (self *GIDev) SetDevice(device *Device) {
 	self.device = device
+}
+
+func (self *GIDev) SetCustom(name string, val interface{}) {
+	if name == "goIosDevice" {
+		self.goIosDevice = val.(ios.DeviceEntry)
+	}
 }
