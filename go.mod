@@ -3,7 +3,7 @@ module main.go
 go 1.12
 
 //replace github.com/go-cmd/cmd => ../cmd
-//replace github.com/nanoscopic/ujsonin/v2 => ../ujsonin/v2
+replace github.com/nanoscopic/ujsonin/v2 => ../ujsonin_private/v2
 
 require (
 	github.com/danielpaulus/go-ios v1.0.30

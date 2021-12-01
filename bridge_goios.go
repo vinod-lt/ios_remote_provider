@@ -353,56 +353,54 @@ func (self *GIBridge) GetDevs(config *Config) []string {
     return conn
 }*/
 
-func (self *GIDev) GetPid(appname string) uint64 {
-	if self.devInfoService == nil {
-		//if self.instrumentsConn == nil {
-		//    self.instrumentsConn = connectInstruments( self.goIosDevice )
-		//}
-		//self.devInfoChan = self.instrumentsConn.RequestChannelIdentifier( "com.apple.instruments.server.services.deviceinfo", nil )
-		var err error
-		self.devInfoService, err = instruments.NewDeviceInfoService(self.goIosDevice)
-		if err != nil {
-			return 0
-		}
-	}
+/*func (self *GIDev) GetPid( appname string ) uint64 {
+    if self.devInfoService == nil {
+        //if self.instrumentsConn == nil {
+        //    self.instrumentsConn = connectInstruments( self.goIosDevice )
+        //}
+        //self.devInfoChan = self.instrumentsConn.RequestChannelIdentifier( "com.apple.instruments.server.services.deviceinfo", nil )
+        var err error
+        self.devInfoService, err = instruments.NewDeviceInfoService( self.goIosDevice )
+        if err != nil { return 0 }
+    }
 
-	procs, err := self.devInfoService.ProcessList()
+    procs, err := self.devInfoService.ProcessList()
+    if err != nil { return 0 }
+
+    for _,proc := range procs {
+        if proc.Name == appname {
+            return proc.Pid
+        }
+    }
+    return 0
+}*/
+
+func (self *GIDev) GetPid(appname string) uint64 {
+	json, err := exec.Command(self.bridge.cli,
+		[]string{
+			"ps",
+			"--udid", self.udid,
+		}...).Output()
+
 	if err != nil {
+		fmt.Printf("Could not find pid for %s; err=%s, json=%s\n", appname, err, json)
 		return 0
 	}
 
-	for _, proc := range procs {
-		if proc.Name == appname {
-			return proc.Pid
+	root, _ := uj.Parse([]byte("{\"procs\":" + string(json) + "}"))
+
+	pid := 0
+	root.Get("procs").ForEach(func(proc uj.JNode) {
+		name := proc.Get("Name").String()
+		if name != appname {
+			return
 		}
-	}
-	return 0
+		pid = proc.Get("Pid").Int()
+	})
+
+	fmt.Printf("Found pid %d for %s\n", pid, appname)
+	return uint64(pid)
 }
-
-/*func (self *GIDev) GetPid( appname string ) uint64 {
-    json, err := exec.Command( self.bridge.cli,
-        []string{
-            "ps",
-            "--udid", self.udid,
-        }... ).Output()
-
-    if err != nil {
-        fmt.Printf("Could not find pid for %s; err=%s, json=%s\n", appname, err, json )
-        return 0
-    }
-
-    root, _ := uj.Parse( []byte( "{\"procs\":" + string(json) + "}" ) )
-
-    pid := 0
-    root.Get("procs").ForEach( func( proc uj.JNode ) {
-        name := proc.Get("Name").String()
-        if name != appname { return }
-        pid = proc.Get("Pid").Int()
-    } )
-
-    fmt.Printf("Found pid %d for %s\n", pid, appname )
-    return uint64( pid )
-}*/
 
 /*func (self *GIDev) Kill( pid uint64 ) {
     fmt.Printf("Killing process id %d\n", pid )

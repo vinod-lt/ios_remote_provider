@@ -462,7 +462,7 @@ func (self *ControlFloor) openWebsocket() {
 					}()
 				} else if mType == "text" {
 					udid := root.Get("udid").String()
-					text := root.Get("text").String()
+					text := root.Get("text").StringEscaped()
 					go func() {
 						dev := self.DevTracker.getDevice(udid)
 						if dev != nil {
