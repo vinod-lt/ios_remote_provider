@@ -61,6 +61,7 @@ type BridgeDev interface {
 	Launch(bid string)
 	SetConfig(devConfig *CDevice)
 	SetDevice(device *Device)
+	SetCustom(name string, val interface{})
 }
 
 type BackupVideo interface {
