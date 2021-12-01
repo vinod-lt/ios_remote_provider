@@ -404,25 +404,25 @@ func (self *GIDev) GetPid(appname string) uint64 {
     return uint64( pid )
 }*/
 
-func (self *GIDev) Kill(pid uint64) {
-	fmt.Printf("Killing process id %d\n", pid)
-
-	if self.procControl == nil {
-		self.procControl, _ = instruments.NewProcessControl(self.goIosDevice)
-	}
-	self.procControl.KillProcess(pid)
-}
-
 /*func (self *GIDev) Kill( pid uint64 ) {
     fmt.Printf("Killing process id %d\n", pid )
 
-    exec.Command( self.bridge.cli,
-        []string{
-            "killid", fmt.Sprintf("%d", pid ),
-            "--udid", self.udid,
-        }...
-    ).Output()
+    if self.procControl == nil {
+        self.procControl, _ = instruments.NewProcessControl( self.goIosDevice )
+    }
+    self.procControl.KillProcess( pid )
 }*/
+
+func (self *GIDev) Kill(pid uint64) {
+	fmt.Printf("Killing process id %d\n", pid)
+
+	exec.Command(self.bridge.cli,
+		[]string{
+			"killid", fmt.Sprintf("%d", pid),
+			"--udid", self.udid,
+		}...,
+	).Output()
+}
 
 /*func (self *GIDev) KillBid( bid string ) {
     pid := self.GetPidByBid( bid )
