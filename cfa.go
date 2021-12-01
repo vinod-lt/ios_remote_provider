@@ -2,8 +2,8 @@ package main
 
 import (
     "fmt"
-    //"io/ioutil"
     "net/http"
+    "encoding/json"
     "strings"
     "os"
     "time"
@@ -483,15 +483,21 @@ func (self *CFA) typeText( codes []int ) {
     self.nngSocket.Recv()
 }
 
+type CfaText struct {
+    Action string `json:"action"`
+    Text string `json:"text"`
+}
+
 func (self *CFA) text( text string ) {
-    json := fmt.Sprintf(`{
-        action: "typeText"
-        text: "%s"
-    }`, text )
+    msg := CfaText {
+        Action: "typeText",
+        Text: text,
+    }
+    bytes, _ := json.Marshal( msg )
    
-    log.Info( "sending " + json )
+    log.Info( "sending " + string(bytes) )
       
-    self.nngSocket.Send([]byte(json))
+    self.nngSocket.Send(bytes)
     self.nngSocket.Recv()
 }
 
