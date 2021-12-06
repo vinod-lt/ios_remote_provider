@@ -688,6 +688,10 @@ func (self *Device) clickAt( x int, y int ) {
     self.cfa.clickAt( x, y )
 }
 
+func (self *Device) doubleclickAt( x int, y int ) {
+    self.cfa.doubleclickAt( x, y )
+}
+
 func (self *Device) mouseDown( x int, y int ) {
     self.cfa.mouseDown( x, y )
 }

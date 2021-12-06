@@ -307,7 +307,18 @@ func ( self *ControlFloor ) openWebsocket() {
                         }
                         respondChan <- &CFR_Pong{ id: id, text: "done" }
                     } ()
-                } else if mType == "mouseDown" {
+                } else if mType == "doubleclick" {
+                    udid := root.Get("udid").String()
+                    x := root.Get("x").Int()
+                    y := root.Get("y").Int()
+                    go func() {
+                        dev := self.DevTracker.getDevice( udid )
+                        if dev != nil {
+                            dev.doubleclickAt( x, y )
+                        }
+                        respondChan <- &CFR_Pong{ id: id, text: "done" }
+                    } ()
+                }else if mType == "mouseDown" {
                     udid := root.Get("udid").String()
                     x := root.Get("x").Int()
                     y := root.Get("y").Int()
@@ -350,6 +361,7 @@ func ( self *ControlFloor ) openWebsocket() {
                         if dev != nil {
                             dev.longPress( x, y, time )
                         }
+                        respondChan <- &CFR_Pong{ id: id, text: "done" }
                     } ()
                 } else if mType == "home" {
                     udid := root.Get("udid").String()
