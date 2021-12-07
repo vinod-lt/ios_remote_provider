@@ -328,6 +328,17 @@ func (self *CFA) clickAt(x int, y int) {
 	self.nngSocket.Recv()
 }
 
+func (self *CFA) doubleclickAt(x int, y int) {
+	json := fmt.Sprintf(`{
+        action: "doubletap"
+        x:%d
+        y:%d
+    }`, x, y)
+
+	self.nngSocket.Send([]byte(json))
+	self.nngSocket.Recv()
+}
+
 func (self *CFA) mouseDown(x int, y int) {
 	json := fmt.Sprintf(`{
         action: "mouseDown"

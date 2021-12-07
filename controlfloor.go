@@ -38,29 +38,6 @@ type ControlFloor struct {
 	selfSigned bool
 }
 
-//MARK:-  LT Changes ==========Start==========
-type CFR_Refresh struct {
-	Id      int    `json:"id"`
-	Refresh string `json:"refresh"`
-}
-
-func (self *CFR_Refresh) asText() string {
-	text, _ := json.Marshal(self)
-	return string(text)
-}
-
-type CFR_Restart struct {
-	Id      int    `json:"id"`
-	Restart string `json:"restart"`
-}
-
-func (self *CFR_Restart) asText() string {
-	text, _ := json.Marshal(self)
-	return string(text)
-}
-
-//LT Changes ==========End==========
-
 func NewControlFloor(config *Config) (*ControlFloor, chan bool, chan bool) {
 	jar, err := cookiejar.New(&cookiejar.Options{})
 	if err != nil {
@@ -337,6 +314,17 @@ func (self *ControlFloor) openWebsocket() {
 						}
 						respondChan <- &CFR_Pong{id: id, text: "done"}
 					}()
+				} else if mType == "doubleclick" {
+					udid := root.Get("udid").String()
+					x := root.Get("x").Int()
+					y := root.Get("y").Int()
+					go func() {
+						dev := self.DevTracker.getDevice(udid)
+						if dev != nil {
+							dev.doubleclickAt(x, y)
+						}
+						respondChan <- &CFR_Pong{id: id, text: "done"}
+					}()
 				} else if mType == "mouseDown" {
 					udid := root.Get("udid").String()
 					x := root.Get("x").Int()
@@ -380,6 +368,7 @@ func (self *ControlFloor) openWebsocket() {
 						if dev != nil {
 							dev.longPress(x, y, time)
 						}
+						respondChan <- &CFR_Pong{id: id, text: "done"}
 					}()
 				} else if mType == "home" {
 					udid := root.Get("udid").String()
@@ -634,18 +623,6 @@ func (self *ControlFloor) baseNotify(name string, udid string, variant string, v
 			"udid":   censorUuid(udid),
 			"values": vals,
 		}).Info(fmt.Sprintf("Notifying CF of %s", name))
-	}
-	//if WDA started successfully, we can now go to home screen
-	if name == "WDA start" {
-		fmt.Println("Going home")
-		dev := self.DevTracker.getDevice(udid)
-		if dev != nil {
-			dev.home()
-			dev.home()
-			dev.home()
-		} else {
-			fmt.Println("Device not found for going home")
-		}
 	}
 }
 
