@@ -1026,3 +1026,7 @@ func (self *Device) Refresh() string {
 func (self *Device) Restart() string {
 	return self.cfa.Restart()
 }
+
+func (self *Device) LaunchSafariUrl(url string) {
+	self.cfa.LaunchSafariUrl(url)
+}

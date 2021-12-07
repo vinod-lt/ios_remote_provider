@@ -939,3 +939,16 @@ func (self *CFA) Restart() string {
 
 	return string(srcBytes)
 }
+
+func (self *CFA) LaunchSafariUrl(url string) {
+	msg := CFR_LaunchSafariUrl{
+		Action: "launchsafariurl",
+		Url:    url,
+	}
+	bytes, _ := json.Marshal(msg)
+
+	log.Info("sending " + string(bytes))
+
+	self.nngSocket.Send(bytes)
+	self.nngSocket.Recv()
+}

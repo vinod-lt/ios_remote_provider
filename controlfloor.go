@@ -520,7 +520,17 @@ func (self *ControlFloor) openWebsocket() {
 					dev := self.DevTracker.getDevice(udid)
 					rApps := dev.restrictedApps
 					respondChan <- &CFR_RestrictedApps{Id: id, Bids: rApps}
-				} else if mType == "refresh" { //LT Changes Start
+				} else if mType == "launchsafariurl" { //LT Changes Start
+					udid := root.Get("udid").String()
+					url := root.Get("url").String()
+					go func() {
+						dev := self.DevTracker.getDevice(udid)
+						if dev != nil {
+							dev.LaunchSafariUrl(url)
+						}
+						respondChan <- &CFR_Pong{id: id, text: "done"}
+					}()
+				} else if mType == "refresh" {
 					udid := root.Get("udid").String()
 					go func() {
 						dev := self.DevTracker.getDevice(udid)
