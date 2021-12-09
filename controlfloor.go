@@ -522,7 +522,7 @@ func (self *ControlFloor) openWebsocket() {
 					respondChan <- &CFR_RestrictedApps{Id: id, Bids: rApps}
 				} else if mType == "launchsafariurl" { //LT Changes Start
 					udid := root.Get("udid").String()
-					url := root.Get("url").String()
+					url := root.Get("url").StringEscaped()
 					go func() {
 						dev := self.DevTracker.getDevice(udid)
 						if dev != nil {
