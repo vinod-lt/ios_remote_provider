@@ -45,6 +45,7 @@ type Device struct {
     wdaPortFixed    bool
     cfaNngPort      int
     cfaNngPort2     int
+    keyPort         int
     vidPort         int
     vidControlPort  int
     vidLogPort      int
@@ -116,6 +117,14 @@ func NewDevice( config *Config, devTracker *DeviceTracker, udid string, bdev Bri
         } else {
             dev.wdaPort = devTracker.getPort()
         }
+        
+        keyMethod := devConfig.keyMethod
+        if keyMethod == "base" {
+            dev.keyPort = 0
+        } else if keyMethod == "app" {
+            dev.keyPort = devTracker.getPort()
+        }
+        
     } else {
         dev.wdaPort = devTracker.getPort()
     }
@@ -137,6 +146,9 @@ func ( self *Device ) releasePorts() {
     dt.freePort( self.vidLogPort )
     dt.freePort( self.vidControlPort )
     dt.freePort( self.backupVideoPort )
+    if self.keyPort != 0 {
+        dt.freePort( self.keyPort )
+    }
 }
 
 func ( self *Device ) startProc( proc *GenericProc ) {
@@ -418,7 +430,7 @@ func (self *Device) devAppChanged( bundleId string ) {
 func (self *Device) startProcs() {
     // Start CFA
     self.cfa = NewCFA( self.config, self.devTracker, self )
-        
+    
     if self.config.cfaMethod == "manual" {
         //self.cfa.startCfaNng()
     }
@@ -507,6 +519,12 @@ func (self *Device) startProcs() {
             if strings.HasPrefix( msg, "Foreground apps changed" ) {
                 //fmt.Printf("App changed\n")
                 //self.EventCh <- DevEvent{ action: DEV_APP_CHANGED }
+            }
+        } else if app == "CFAgent-Runner(CFAgentLib)" {
+            if strings.HasPrefix( msg, "keyxr keyboard ready" ) {
+                self.cfa.keyConnect()
+            } else if strings.HasPrefix( msg, "keyxr keyboard vanished" ) {
+                self.cfa.keyStop()
             }
         }
     } )

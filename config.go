@@ -22,6 +22,7 @@ type CDevice struct {
     controlCenterMethod string
     ccRecordingMethod   string
     videoMode           string
+    keyMethod           string
 }
 
 type AlertConfig struct {
@@ -172,6 +173,7 @@ func readDevs( root uj.JNode ) ( map[string]CDevice ) {
             ccRecordingMethod := "longTouch"
             tunnelMethod := "go-ios"
             videoMode := "cfagent"
+            keyMethod := "base" // or "app"
             if widthNode != nil {
                 uiWidth = widthNode.Int()
             }
@@ -211,6 +213,10 @@ func readDevs( root uj.JNode ) ( map[string]CDevice ) {
             if videoModeNode != nil {
                 videoMode = videoModeNode.String()
             }
+            keyMethodNode := devNode.Get("keyMethod")
+            if keyMethodNode != nil {
+                keyMethod = keyMethodNode.String()
+            }
             
             dev := CDevice{
                 udid: udid,
@@ -218,6 +224,7 @@ func readDevs( root uj.JNode ) ( map[string]CDevice ) {
                 uiHeight: uiHeight,
                 cfaMethod: cfaMethod,
                 wdaMethod: wdaMethod,
+                keyMethod: keyMethod,
                 wdaPort: wdaPort,
                 vidStartMethod: vidStartMethod,
                 controlCenterMethod: controlCenterMethod,
