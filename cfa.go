@@ -328,6 +328,17 @@ func (self *CFA) clickAt(x int, y int) {
 	self.nngSocket.Recv()
 }
 
+func (self *CFA) doubleclickAt(x int, y int) {
+	json := fmt.Sprintf(`{
+        action: "doubletap"
+        x:%d
+        y:%d
+    }`, x, y)
+
+	self.nngSocket.Send([]byte(json))
+	self.nngSocket.Recv()
+}
+
 func (self *CFA) mouseDown(x int, y int) {
 	json := fmt.Sprintf(`{
         action: "mouseDown"
@@ -927,4 +938,17 @@ func (self *CFA) Restart() string {
 	srcBytes, _ := self.nngSocket.Recv()
 
 	return string(srcBytes)
+}
+
+func (self *CFA) LaunchSafariUrl(url string) {
+	msg := CFR_LaunchSafariUrl{
+		Action: "launchsafariurl",
+		Url:    url,
+	}
+	bytes, _ := json.Marshal(msg)
+
+	log.Info("sending " + string(bytes))
+
+	self.nngSocket.Send(bytes)
+	self.nngSocket.Recv()
 }

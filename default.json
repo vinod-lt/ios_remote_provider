@@ -90,6 +90,10 @@
             match: "use your approximate location"
             response: "Allow Once"
         }
+        {
+            match: "location"
+            response: "Allow Once"
+        }
     ]
     vidStartAlerts: [
         {
@@ -120,11 +124,9 @@
             match: "use your approximate location"
             response: "Allow Once"
         }
-    ]
-    ignoreApps: [
-        "com.apple.Preferences",
-        "com.apple.mobilephone",
-        "com.apple.MobileSMS",
-        "com.apple.MobileAddressBook"
+        {
+            match: "location"
+            response: "Allow Once"
+        }
     ]
 }
