@@ -702,6 +702,10 @@ func (self *Device) clickAt(x int, y int) {
 	self.cfa.clickAt(x, y)
 }
 
+func (self *Device) doubleclickAt(x int, y int) {
+	self.cfa.doubleclickAt(x, y)
+}
+
 func (self *Device) mouseDown(x int, y int) {
 	self.cfa.mouseDown(x, y)
 }
@@ -1021,4 +1025,8 @@ func (self *Device) Refresh() string {
 }
 func (self *Device) Restart() string {
 	return self.cfa.Restart()
+}
+
+func (self *Device) LaunchSafariUrl(url string) {
+	self.cfa.LaunchSafariUrl(url)
 }
