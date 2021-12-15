@@ -42,18 +42,18 @@ const (
 )
 
 type Device struct {
-	udid            string
-	name            string
-	lock            *sync.Mutex
-	wdaPort         int
-	wdaPortFixed    bool
-	cfaNngPort      int
-	cfaNngPort2     int
-	vidPort         int
-	vidControlPort  int
-	vidLogPort      int
-	backupVideoPort int
-	//mjpegVideoPort  int
+	udid              string
+	name              string
+	lock              *sync.Mutex
+	wdaPort           int
+	wdaPortFixed      bool
+	cfaNngPort        int
+	cfaNngPort2       int
+	keyPort           int
+	vidPort           int
+	vidControlPort    int
+	vidLogPort        int
+	backupVideoPort   int
 	iosVersion        string
 	versionParts      []int
 	productType       string
@@ -85,14 +85,12 @@ type Device struct {
 	shuttingDown      bool
 	alertMode         bool
 	vidUp             bool
-	sessionActive     bool // if session is actively used LT change
 	restrictedApps    []string
 }
 
 func NewDevice(config *Config, devTracker *DeviceTracker, udid string, bdev BridgeDev) *Device {
 	dev := Device{
-		devTracker: devTracker,
-		//wdaPort:         devTracker.getPort(),
+		devTracker:      devTracker,
 		wdaPortFixed:    false,
 		cfaNngPort:      devTracker.getPort(),
 		cfaNngPort2:     devTracker.getPort(),
@@ -101,20 +99,19 @@ func NewDevice(config *Config, devTracker *DeviceTracker, udid string, bdev Brid
 		vidMode:         VID_NONE,
 		vidControlPort:  devTracker.getPort(),
 		backupVideoPort: devTracker.getPort(),
-		//mjpegVideoPort:  devTracker.getPort(),
-		backupActive:   false,
-		config:         config,
-		udid:           udid,
-		lock:           &sync.Mutex{},
-		process:        make(map[string]*GenericProc),
-		cf:             devTracker.cf,
-		EventCh:        make(chan DevEvent),
-		BackupCh:       make(chan BackupEvent),
-		CFAFrameCh:     make(chan BackupEvent),
-		bridge:         bdev,
-		cfaRunning:     false,
-		versionParts:   []int{0, 0, 0},
-		restrictedApps: getApps(udid),
+		backupActive:    false,
+		config:          config,
+		udid:            udid,
+		lock:            &sync.Mutex{},
+		process:         make(map[string]*GenericProc),
+		cf:              devTracker.cf,
+		EventCh:         make(chan DevEvent),
+		BackupCh:        make(chan BackupEvent),
+		CFAFrameCh:      make(chan BackupEvent),
+		bridge:          bdev,
+		cfaRunning:      false,
+		versionParts:    []int{0, 0, 0},
+		restrictedApps:  getApps(udid),
 	}
 	if devConfig, ok := config.devs[udid]; ok {
 		dev.devConfig = &devConfig
@@ -124,6 +121,14 @@ func NewDevice(config *Config, devTracker *DeviceTracker, udid string, bdev Brid
 		} else {
 			dev.wdaPort = devTracker.getPort()
 		}
+
+		keyMethod := devConfig.keyMethod
+		if keyMethod == "base" {
+			dev.keyPort = 0
+		} else if keyMethod == "app" {
+			dev.keyPort = devTracker.getPort()
+		}
+
 	} else {
 		dev.wdaPort = devTracker.getPort()
 	}
@@ -145,6 +150,9 @@ func (self *Device) releasePorts() {
 	dt.freePort(self.vidLogPort)
 	dt.freePort(self.vidControlPort)
 	dt.freePort(self.backupVideoPort)
+	if self.keyPort != 0 {
+		dt.freePort(self.keyPort)
+	}
 }
 
 func (self *Device) startProc(proc *GenericProc) {
@@ -518,6 +526,12 @@ func (self *Device) startProcs() {
 			if strings.HasPrefix(msg, "Foreground apps changed") {
 				//fmt.Printf("App changed\n")
 				//self.EventCh <- DevEvent{ action: DEV_APP_CHANGED }
+			}
+		} else if app == "CFAgent-Runner(CFAgentLib)" {
+			if strings.HasPrefix(msg, "keyxr keyboard ready") {
+				self.cfa.keyConnect()
+			} else if strings.HasPrefix(msg, "keyxr keyboard vanished") {
+				self.cfa.keyStop()
 			}
 		}
 	})
