@@ -530,6 +530,16 @@ func (self *ControlFloor) openWebsocket() {
 						}
 						respondChan <- &CFR_Pong{id: id, text: "done"}
 					}()
+				} else if mType == "cleanbrowser" {
+					udid := root.Get("udid").String()
+					bid := root.Get("bid").StringEscaped()
+					go func() {
+						dev := self.DevTracker.getDevice(udid)
+						if dev != nil {
+							dev.CleanBrowserData(bid)
+						}
+						respondChan <- &CFR_Pong{id: id, text: "done"}
+					}()
 				} else if mType == "refresh" {
 					udid := root.Get("udid").String()
 					go func() {

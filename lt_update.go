@@ -30,9 +30,9 @@ type CFR_LaunchSafariUrl struct {
 	Url    string `json:"url"`
 }
 
-// func (self *CFR_LaunchSafariUrl) asText() string {
-// 	text, _ := json.Marshal(self)
-// 	return string(text)
-// }
+type CFR_CleanBrowserData struct {
+	Action string `json:"action"`
+	Bid    string `json:"bid"`
+}
 
 //LT Changes ==========End==========

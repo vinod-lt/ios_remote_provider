@@ -1181,3 +1181,16 @@ func (self *CFA) LaunchSafariUrl(url string) {
 	self.nngSocket.Send(bytes)
 	self.nngSocket.Recv()
 }
+
+func (self *CFA) CleanBrowserData(bid string) {
+	msg := CFR_CleanBrowserData{
+		Action: "cleanbrowser",
+		Bid:    bid,
+	}
+	bytes, _ := json.Marshal(msg)
+
+	log.Info("sending " + string(bytes))
+
+	self.nngSocket.Send(bytes)
+	self.nngSocket.Recv()
+}

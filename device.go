@@ -1044,3 +1044,7 @@ func (self *Device) Restart() string {
 func (self *Device) LaunchSafariUrl(url string) {
 	self.cfa.LaunchSafariUrl(url)
 }
+
+func (self *Device) CleanBrowserData(bid string) {
+	self.cfa.CleanBrowserData(bid)
+}
