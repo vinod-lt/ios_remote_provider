@@ -17,4 +17,5 @@ require (
 	github.com/sirupsen/logrus v1.7.0
 	go.nanomsg.org/mangos/v3 v3.1.3
 	xorm.io/xorm v1.2.5 // indirect
+	github.com/pion/webrtc/v3 v3.1.11
 )
