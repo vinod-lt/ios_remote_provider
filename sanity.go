@@ -38,14 +38,14 @@ func sanityChecks( config *Config, cmd *uc.Cmd ) bool {
         }
     }*/
     
-    if config.cfaSanityCheck {
+    /*if config.cfaSanityCheck {
         cfaPath := config.cfaPath
         cfaPath, _ = filepath.Abs( "./" + cfaPath )
         if _, err := os.Stat( cfaPath ); os.IsNotExist( err ) {
             fmt.Fprintf(os.Stderr,"%s does not exist. Rerun `make` to build CFAgent\n",cfaPath)
             return false
         }
-    }
+    }*/
     
     return true
 }
