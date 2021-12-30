@@ -1136,11 +1136,11 @@ func (self *Device) initWebrtc( offer string ) string {
             self.onRtcMsg( msg )
         },
         func(d *webrtc.DataChannel) { // onOpen
-            fmt.Printf("Running initWebrt - onOpen\n")
+            fmt.Printf("Running initWebrtc - onOpen\n")
             self.onRtcOpen( d )
         },
         func() { // onExit
-            fmt.Printf("Running initWebrt - onExit\n")
+            fmt.Printf("Running initWebrtc - onExit\n")
             self.onRtcExit()
         },
     )

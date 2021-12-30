@@ -300,6 +300,8 @@ func runAddRec( cmd *uc.Cmd ) {
 }
 
 func cfaWrapped( cmd *uc.Cmd, appName string, doStuff func( cfa *CFA, dev *Device ) ) {
+    openDbConnection()
+    
     config := NewConfig( "config.json", "default.json", "calculated.json" )
   
     runCleanup( cmd )
@@ -607,6 +609,9 @@ func common( cmd *uc.Cmd ) *Config {
     
     config := NewConfig( configPath, defaultsPath, calculatedPath )
     config.cpuProfile = cmd.Get("-cpuprofile").Bool()
+    
+    openDbConnection()
+    
     return config
 }
 
@@ -653,8 +658,6 @@ func runMain( cmd *uc.Cmd ) {
             return
         }
     }
-    
-    openDbConnection()
     
     devTracker := NewDeviceTracker( config, true, ids )
     coro_sigterm( config, devTracker )
