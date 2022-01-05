@@ -14,6 +14,7 @@ require (
 	github.com/nanoscopic/uclop v1.1.0
 	github.com/nanoscopic/ujsonin/v2 v2.0.6
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
+	github.com/pion/webrtc/v3 v3.1.11
 	github.com/sirupsen/logrus v1.7.0
 	go.nanomsg.org/mangos/v3 v3.1.3
 	xorm.io/xorm v1.2.5

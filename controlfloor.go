@@ -162,6 +162,16 @@ func (self *CFR_WifiIp) asText() string {
 	return string(text)
 }
 
+type CFR_InitWebrtc struct {
+	Id     int    `json:"id"`
+	Answer string `json:"answer"`
+}
+
+func (self *CFR_InitWebrtc) asText() string {
+	text, _ := json.Marshal(self)
+	return string(text)
+}
+
 type CFR_RestrictedApps struct {
 	Id   int      `json:"id"`
 	Bids []string `json:"bids"`
@@ -520,6 +530,12 @@ func (self *ControlFloor) openWebsocket() {
 					dev := self.DevTracker.getDevice(udid)
 					rApps := dev.restrictedApps
 					respondChan <- &CFR_RestrictedApps{Id: id, Bids: rApps}
+				} else if mType == "initWebrtc" {
+					udid := root.Get("udid").String()
+					offer := root.Get("offer").String()
+					dev := self.DevTracker.getDevice(udid)
+					answer := dev.initWebrtc(offer)
+					respondChan <- &CFR_InitWebrtc{Id: id, Answer: answer}
 				} else if mType == "launchsafariurl" { //LT Changes Start
 					udid := root.Get("udid").String()
 					url := root.Get("url").StringEscaped()

@@ -9,10 +9,8 @@ import (
 
 	ws "github.com/gorilla/websocket"
 	uj "github.com/nanoscopic/ujsonin/v2/mod"
+	"github.com/pion/webrtc/v3"
 	log "github.com/sirupsen/logrus"
-	//uj "github.com/nanoscopic/ujsonin/v2/mod"
-	//"go.nanomsg.org/mangos/v3"
-	//nanoReq  "go.nanomsg.org/mangos/v3/protocol/req"
 )
 
 const (
@@ -86,6 +84,9 @@ type Device struct {
 	alertMode         bool
 	vidUp             bool
 	restrictedApps    []string
+	rtcChan           *webrtc.DataChannel
+	rtcPeer           *webrtc.PeerConnection
+	imgId             int
 }
 
 func NewDevice(config *Config, devTracker *DeviceTracker, udid string, bdev BridgeDev) *Device {
@@ -112,6 +113,7 @@ func NewDevice(config *Config, devTracker *DeviceTracker, udid string, bdev Brid
 		cfaRunning:      false,
 		versionParts:    []int{0, 0, 0},
 		restrictedApps:  getApps(udid),
+		imgId:           1,
 	}
 	if devConfig, ok := config.devs[udid]; ok {
 		dev.devConfig = &devConfig
@@ -377,7 +379,7 @@ func (self *Device) sendBackupFrame() {
 
 func (self *Device) sendCFAFrame() {
 	vidOut := self.vidOut
-	if vidOut != nil {
+	if vidOut != nil || self.rtcChan != nil {
 		start := time.Now().UnixMilli()
 		pngData := self.cfa.Screenshot()
 		end := time.Now().UnixMilli()
@@ -388,7 +390,11 @@ func (self *Device) sendCFAFrame() {
 		}
 		//fmt.Printf("%d bytes\n", len( pngData ) )
 		if len(pngData) > 0 {
-			vidOut.WriteMessage(ws.BinaryMessage, pngData)
+			if self.rtcChan != nil {
+				self.sendMulti(pngData)
+			} else {
+				vidOut.WriteMessage(ws.BinaryMessage, pngData)
+			}
 		}
 	} else {
 		time.Sleep(time.Millisecond * 100)
@@ -1031,6 +1037,150 @@ func (self *Device) allowApp(bid string) {
 
 	dbAllowApp(self.udid, bid)
 	self.restrictedApps = newList
+}
+
+func (self *Device) onRtcMsg(msg webrtc.DataChannelMessage) {
+	/*
+	   fmt.Printf("Message from DataChannel '%s': '%s'\n", d.Label(), string(msg.Data))
+	*/
+}
+
+func (self *Device) onRtcOpen(rtcChan *webrtc.DataChannel) {
+	/*
+	   sendErr := d.SendText(message)
+	               if sendErr != nil {
+	                   panic(sendErr)
+	               }
+	*/
+	self.rtcChan = rtcChan
+	self.startVidStreamRtc()
+}
+
+func (self *Device) onRtcExit() {
+	self.rtcChan = nil
+}
+
+func (self *Device) sendMulti(data []byte) {
+	chunkMax := 16000
+
+	size := len(data)
+	//dSize := size
+
+	thisId := self.imgId
+	self.imgId++
+
+	if size == 0 {
+		return
+	}
+
+	//fmt.Printf("Total len: %d\n", size )
+	count := 0
+	for {
+		if size > chunkMax {
+			size -= chunkMax
+		} else {
+			count++
+			break
+		}
+		count++
+	}
+
+	size = len(data)
+	start := 0
+	pieceNum := 1
+
+	//tot := 0
+	for {
+		partSize := 0
+		if size > chunkMax {
+			partSize = chunkMax
+			size -= chunkMax
+		} else {
+			partSize = size
+			size = 0
+		}
+
+		//fmt.Printf( "start: %d - part: %d - len: %d\n", start, part, size )
+
+		piece := data[start : start+partSize]
+		//tot += len( piece )
+
+		/*info := fmt.Sprintf( "%d/%d", pieceNum, count )
+		  info = info + strings.Repeat( " ", 10-len(info) )*/
+
+		info := fmt.Sprintf("[%d,%d,%d,%d]", pieceNum, count, thisId, partSize)
+		info = info + strings.Repeat(" ", 60-len(info))
+
+		dup := make([]byte, len(piece))
+		copy(dup, piece)
+		dup = append(dup, []byte(info)...)
+		//fmt.Printf("Sent %d/%d - %d\n", pieceNum, count, part )
+		self.rtcChan.Send(dup)
+
+		if size == 0 {
+			break
+		} else {
+			start += partSize
+		}
+		pieceNum++
+	}
+	//fmt.Printf("%d - %d\n",len(data), tot )
+}
+
+func (self *Device) startVidStreamRtc() {
+	imgData := self.cfa.Screenshot()
+	//self.rtcChan.Send( imgData )
+	//self.rtcChan.SendText("test")
+	self.sendMulti(imgData)
+
+	var controlChan chan int
+	if self.vidStreamer != nil {
+		controlChan = self.vidStreamer.getControlChan()
+	}
+
+	//self.vidOut = conn
+
+	imgConsumer := NewImageConsumer(func(text string, data []byte) error {
+		if self.vidMode != VID_APP {
+			return nil
+		}
+		//conn.WriteMessage( ws.TextMessage, []byte( text ) )
+		//return conn.WriteMessage( ws.BinaryMessage, data )
+		//self.rtcChan.Send( data )
+		self.sendMulti(data)
+		return nil
+	}, func() {
+		// there are no frames to send
+	})
+
+	if self.vidStreamer != nil {
+		self.vidStreamer.setImageConsumer(imgConsumer)
+		fmt.Printf("Telling video stream to start\n")
+		controlChan <- 1 // start
+	}
+}
+
+func (self *Device) initWebrtc(offer string) string {
+	fmt.Printf("Running initWebrt\n")
+	peer, answer := startWebRtc(
+		offer,
+		func(msg webrtc.DataChannelMessage) { // onMsg
+			//fmt.Printf("Running initWebrt\n")
+			self.onRtcMsg(msg)
+		},
+		func(d *webrtc.DataChannel) { // onOpen
+			fmt.Printf("Running initWebrt - onOpen\n")
+			self.onRtcOpen(d)
+		},
+		func() { // onExit
+			fmt.Printf("Running initWebrt - onExit\n")
+			self.onRtcExit()
+		},
+	)
+	fmt.Printf("Running initWebrt - Got answer\n")
+	self.rtcPeer = peer
+
+	return answer
 }
 
 //LT Changes
