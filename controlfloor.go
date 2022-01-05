@@ -37,7 +37,7 @@ type ControlFloor struct {
     selfSigned bool
 }
 
-func NewControlFloor( config *Config ) (*ControlFloor, chan bool, chan bool) {
+func NewControlFloor( config *Config ) (*ControlFloor, chan bool) {
     jar, err := cookiejar.New(&cookiejar.Options{})
     if err != nil {
         panic( err )
@@ -85,11 +85,8 @@ func NewControlFloor( config *Config ) (*ControlFloor, chan bool, chan bool) {
     }
     
     stopCf := make( chan bool )
-    cfReady := make( chan bool )
-    
     go func() {
         exit := false
-        delayed := false
         for {
             select {
               case <- stopCf:
@@ -104,25 +101,21 @@ func NewControlFloor( config *Config ) (*ControlFloor, chan bool, chan bool) {
                 log.WithFields( log.Fields{
                     "type": "cf_login_success",
                 } ).Info( "Logged in to control floor" )
-                cfReady <- true
             } else {
                 fmt.Println("Could not login to control floor")
                 fmt.Println("Waiting 10 seconds to retry...")
                 time.Sleep( time.Second * 10 )
                 fmt.Println("trying again\n")
-                delayed = true
                 continue
             }
             
-            if delayed {
-                self.DevTracker.cfReady()
-            }
+            self.DevTracker.cfReady()
             
             self.openWebsocket()
         }
     }()
     
-    return &self, stopCf, cfReady
+    return &self, stopCf
 }
 
 type CFResponse interface {
@@ -285,6 +278,14 @@ func ( self *ControlFloor ) openWebsocket() {
                 }
         }
     } }()
+    
+    /*go func() { for {
+        err := conn.WriteMessage( ws.TextMessage, []byte("{id:0,type:'ping'}") )
+        if err != nil {
+            fmt.Printf("Lost ws connection to ControlFloor\n")
+        }
+        time.Sleep( time.Second )
+    } }()*/
         
     // There is only a single websocket connection between a provider and controlfloor
     // As a result, all messages sent here ought to be small, because if they aren't
@@ -302,7 +303,9 @@ func ( self *ControlFloor ) openWebsocket() {
                 root, _ := uj.Parse( msg )
                 id := root.Get("id").Int()
                 mType := root.Get("type").String()
-                if mType == "ping" {
+                if mType == "pong" {
+                    
+                } else if mType == "ping" {
                     respondChan <- &CFR_Pong{ id: id, text: "pong" }
                 } else if mType == "click" {
                     udid := root.Get("udid").String()
