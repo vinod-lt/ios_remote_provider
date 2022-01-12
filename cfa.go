@@ -26,6 +26,7 @@ type CFA struct {
     //sessionId     string
     startChan     chan int
     js2hid        map[int]int
+    specialKeys   map[int]int
     transport     *http.Transport
     client        *http.Client
     nngPort       int
@@ -64,7 +65,7 @@ func addrange( amap map[int]int, from1 int, to1 int, from2 int ) {
 
 func NewCFANoStart( config *Config, devTracker *DeviceTracker, dev *Device ) (*CFA) {
     jh := make( map[int]int )  
-  
+    special := make( map[int]int )  
     //devConfig := dev.devConfig
     
     self := CFA{
@@ -77,6 +78,7 @@ func NewCFANoStart( config *Config, devTracker *DeviceTracker, dev *Device ) (*C
         config:        config,
         //base:          fmt.Sprintf("http://127.0.0.1:%d",dev.wdaPort),
         js2hid:        jh,
+        specialKeys:   special,
         transport:     &http.Transport{},
         keyActive:     false,
         keyLock:       &sync.Mutex{},
@@ -115,6 +117,8 @@ func NewCFANoStart( config *Config, devTracker *DeviceTracker, dev *Device ) (*C
     //jh[96] = // `
     
     jh[-8] = 0x2a // backspace
+    special[-8] = 0x2a
+    
     jh[-9] = 0x2b // tab
     jh[-13] = 0x28 // enter
     jh[-27] = 0x29 // esc
@@ -124,10 +128,15 @@ func NewCFANoStart( config *Config, devTracker *DeviceTracker, dev *Device ) (*C
     jh[-36] = 0x4a // home
     
     jh[-37] = 0x50 // left
+    special[-37] = 0x50
     jh[-38] = 0x52 // up
+    special[-38] = 0x52
     jh[-39] = 0x4f // right
+    special[-39] = 0x4f
     jh[-40] = 0x51 // down
+    special[-40] = 0x51
     jh[-46] = 0x4c // delete
+    special[-46] = 0x4c
       
     return &self
 }
@@ -610,11 +619,20 @@ func (self *CFA) keys( codes []int ) {
     method uses the much slower [application typeType] method.
     */
     if self.config.cfaKeyMethod == "iohid" {
-        dest, ok := self.js2hid[ code ]
-        if ok {
-            self.keysViaIohid( []int{dest} )
+        if self.keyActive {
+            ioCode, isSpecial := self.specialKeys[ code ]
+            if isSpecial {
+                self.keysViaIohid( []int{ioCode} )
+            } else {
+                self.typeText( codes )
+            }
         } else {
-            self.typeText( codes )
+            dest, ok := self.js2hid[ code ]
+            if ok {
+                self.keysViaIohid( []int{dest} )
+            } else {
+                self.typeText( codes )
+            }
         }
     } else {
         self.typeText( codes )
@@ -622,26 +640,8 @@ func (self *CFA) keys( codes []int ) {
 }
 
 func (self *CFA) keysViaIohid( codes []int ) {
-    /*
-    This loop of making repeated calls is obviously quite garbage.
-    A better solution would be to make a call in CFA itself able to handle
-    multiple characters at once.
-    
-    Despite this the performIoHidEvent call is very fast so it can generally
-    keep up with typing speed of a manual user of CF.
-    */
     for _, code := range codes {
-        json := fmt.Sprintf(`{
-          action: "iohid"
-          page: 7
-          usage: %d
-          duration: 0.05
-        }`, code )
-        
-        log.Info( "sending " + json )
-        
-        self.nngSocket.Send([]byte(json))
-        self.nngSocket.Recv()
+        self.ioHid( 7, code )
     }
 }
 
@@ -659,35 +659,6 @@ func (self *CFA) ioHid( page int, code int ) {
     self.nngSocket.Recv()
 }
 
-/*func (self *CFA) typeText( codes []int ) {
-    strArr := []string{}
-
-    for _, code := range codes {
-        // GoLang encodes to utf8 by default. typeText call expects utf8 encoding
-        strArr = append( strArr, fmt.Sprintf("%c", rune( code ) ) )
-    }
-    
-    if self.keyActive {
-        json := fmt.Sprintf(`{ action: "insert", text: "%s" }`, strings.Join( strArr, "" ) )
-        log.Info( "sending to keyApp: " + json )
-        
-        self.keyLock.Lock()
-        self.keySocket.Send( []byte(json) )
-        self.keySocket.Recv()
-        self.keyLock.Unlock()
-    } else {
-        json := fmt.Sprintf(`{
-            action: "typeText"
-            text: "%s"
-        }`, strings.Join( strArr, "" ) )
-       
-        log.Info( "sending " + json )
-      
-        self.nngSocket.Send([]byte(json))
-        self.nngSocket.Recv()
-    }
-}*/
-
 type CfaText struct {
     Action string `json:"action"`
     Text string `json:"text"`
@@ -697,6 +668,10 @@ func (self *CFA) typeText( codes []int ) {
     strArr := []string{}
 
     for _, code := range codes {
+        if code < 0 {
+            code = -code
+        }
+        //fmt.Printf("code is %d\n", code )
         // GoLang encodes to utf8 by default. typeText call expects utf8 encoding
         strArr = append( strArr, fmt.Sprintf("%c", rune( code ) ) )
     }
@@ -725,7 +700,7 @@ func (self *CFA) text( text string ) {
             Text: text,
         }
         bytes, _ := json.Marshal( msg )
-       
+        
         log.Info( "sending " + string(bytes) )
           
         self.nngSocket.Send(bytes)
