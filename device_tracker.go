@@ -25,7 +25,7 @@ type DeviceTracker struct {
     cf           *ControlFloor
     cfStop       chan bool
     bridge       BridgeRoot
-    pendingDevs  []BridgeDev
+    currentDevs  []BridgeDev
     shuttingDown bool
     // only activate the specific list of ids
     idList       []string
@@ -34,12 +34,10 @@ type DeviceTracker struct {
 func NewDeviceTracker( config *Config, detect bool, idList []string ) (*DeviceTracker) {
     var cf *ControlFloor
     var cfStop chan bool
-    var cfReady chan bool
     if detect {
-        cf, cfStop, cfReady = NewControlFloor( config )
-        <- cfReady
+        cf, cfStop = NewControlFloor( config )
     }
-        
+    
     portRange := config.portRange
     parts := strings.Split(portRange,"-")
     portMin, _ := strconv.Atoi( parts[0] )
@@ -56,6 +54,10 @@ func NewDeviceTracker( config *Config, detect bool, idList []string ) (*DeviceTr
         cf: cf,
         cfStop: cfStop,
         idList: idList,
+        currentDevs: []BridgeDev{},
+    }
+    if detect {
+        cf.DevTracker = self
     }
     
     bridgeCreator := NewIIFBridge
@@ -73,9 +75,6 @@ func NewDeviceTracker( config *Config, detect bool, idList []string ) (*DeviceTr
         self,
         detect,
     )
-    if detect {
-        cf.DevTracker = self
-    }
     return self
 }
 
@@ -120,16 +119,27 @@ func (self *DeviceTracker) getDevice( udid string ) (*Device) {
 }
 
 func (self *DeviceTracker) cfReady() {
-    fmt.Println("Starting delayed devices:")
-    for _, bdev := range self.pendingDevs {
-        fmt.Printf("Delayed device - udid: %s\n", bdev.getUdid() )
+    fmt.Println("Notifying CF of devices:")
+    for _, bdev := range self.currentDevs {
+        fmt.Printf("Device - udid: %s\n", bdev.getUdid() )
         self.onDeviceConnect1( bdev )
     }
-    self.pendingDevs = []BridgeDev{}
+    //self.pendingDevs = []BridgeDev{}
 }
 
 func (self *DeviceTracker) onDeviceConnect1( bdev BridgeDev ) *Device {
     udid := bdev.getUdid()
+    
+    startedDevice, isStarted := self.DevMap[ udid ]
+    if isStarted {
+        width := startedDevice.vidWidth
+        height := startedDevice.vidHeight
+        clickWidth := startedDevice.devConfig.uiWidth
+        clickHeight := startedDevice.devConfig.uiHeight
+        self.cf.notifyDeviceExists( udid, width, height, clickWidth, clickHeight )
+        self.cf.notifyDeviceInfo( startedDevice, nil )
+        return startedDevice
+    }
     
     if len( self.idList ) > 0 {
         devFound := false
@@ -141,10 +151,19 @@ func (self *DeviceTracker) onDeviceConnect1( bdev BridgeDev ) *Device {
         if !devFound { return nil }
     }
     
+    found := false
+    for _,adev := range self.currentDevs {
+        if adev == bdev { found = true }
+    }
+    if !found {
+        self.currentDevs = append( self.currentDevs, bdev )
+    }
+        
     if !self.cf.ready {
-        self.pendingDevs = append( self.pendingDevs, bdev )
         fmt.Printf("Device attached, but ControlFloor not ready.\n  udid=%s\n", udid )
         return nil
+    } else {
+        self.currentDevs = append( self.currentDevs, bdev )
     }
     
     //fmt.Printf("udid: %s\n", udid)
