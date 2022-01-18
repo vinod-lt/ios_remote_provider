@@ -604,7 +604,6 @@ func (self *ControlFloor) baseNotify( name string, udid string, variant string, 
             "type": "cf_notify",
             "name": name,
             "udid": censorUuid( udid ),
-            "values": vals,
         } ).Info( fmt.Sprintf("Notifying CF of %s", name) )
     }
 }

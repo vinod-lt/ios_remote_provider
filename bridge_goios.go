@@ -20,11 +20,12 @@ import (
 )
 
 type GIBridge struct {
-    onConnect    func( dev BridgeDev ) ProcTracker
-    onDisconnect func( dev BridgeDev )
+    devOnConnect    func( dev BridgeDev ) ProcTracker
+    devOnDisconnect func( dev BridgeDev )
     cli          string
     devs         map[string]*GIDev
     procTracker  ProcTracker
+    procTrackers map[string]ProcTracker
     config       *Config
 }
 
@@ -46,8 +47,8 @@ type GIDev struct {
 
 func NewGIBridge( config *Config, OnConnect func( dev BridgeDev ) (ProcTracker), OnDisconnect func( dev BridgeDev ), goIosPath string, procTracker ProcTracker, detect bool ) BridgeRoot {
     self := &GIBridge{
-        onConnect:    OnConnect,
-        onDisconnect: OnDisconnect,
+        devOnConnect:    OnConnect,
+        devOnDisconnect: OnDisconnect,
         cli:          goIosPath,
         devs:         make( map[string]*GIDev ),
         procTracker:  procTracker,
@@ -63,6 +64,8 @@ func (self *GIDev) getUdid() string {
 
 func listenForDevices( stopChan chan bool, onConnect func( string, ios.DeviceEntry ), onDisconnect func( string ) ) {
     go func() {
+        udidMap := make( map[int]string )
+        
         exit := false
         for {
             deviceConn, err := ios.NewDeviceConnection(ios.DefaultUsbmuxdSocket)
@@ -98,10 +101,12 @@ func listenForDevices( stopChan chan bool, onConnect func( string, ios.DeviceEnt
                 
                 if msg.MessageType == "Attached" {
                     udid := msg.Properties.SerialNumber
+                    udidMap[ msg.DeviceID ] = udid
                     goIosDevice, _ := ios.GetDevice( udid )
                     onConnect( udid, goIosDevice )
                 } else if msg.MessageType == "Detached" {
-                    onDisconnect( msg.Properties.SerialNumber )
+                    udid := udidMap[ msg.DeviceID ]
+                    onDisconnect( udid )
                 }
             }
             if exit { break }
@@ -112,11 +117,12 @@ func listenForDevices( stopChan chan bool, onConnect func( string, ios.DeviceEnt
 func (self *GIBridge) startDetect() {
     stopChan := make( chan bool )
     listenForDevices( stopChan,
-        func( id string, goIosDevice ios.DeviceEntry ) {
-            self.OnConnect( id, "fake name", nil, goIosDevice )
+        func( udid string, goIosDevice ios.DeviceEntry ) {
+            self.OnConnect( udid, "fake name", nil, goIosDevice )
         },
-        func( id string ) {
-            self.OnDisconnect( id, nil )
+        func( udid string ) {
+            fmt.Printf("Disconnect of id %s\n", udid )
+            self.OnDisconnect( udid, nil )
         })
 }
 
@@ -138,14 +144,14 @@ func (self *GIBridge) OnConnect( udid string, name string, plog *log.Entry, goIo
         dev.config = &devConfig
     }
     
-    dev.procTracker = self.onConnect( dev )
+    dev.procTracker = self.devOnConnect( dev )
 }
 
 func (self *GIBridge) OnDisconnect( udid string, plog *log.Entry ) {
     dev, tracked := self.devs[ udid ]
     if !tracked { return }
     dev.destroy()
-    self.onDisconnect( dev )
+    self.devOnDisconnect( dev )
     delete( self.devs, udid )
 }
 
@@ -214,7 +220,7 @@ func (self *GIDev) tunnelOne( pair TunPair, onready func() ) {
         "--udid", self.udid,
     }
     args = append( args, specs... )
-    fmt.Printf("Starting %s with %s\n", self.bridge.cli, args )
+    //fmt.Printf("Starting %s with %s\n", self.bridge.cli, args )
     
     o := ProcOptions{
         procName: tunName,
@@ -229,7 +235,7 @@ func (self *GIDev) tunnelOne( pair TunPair, onready func() ) {
                 if onready != nil {
                   onready()
                 }
-                fmt.Printf( "tunnel start:%s\n", line )
+                //fmt.Printf( "tunnel start:%s\n", line )
             } else {
                 //fmt.Printf( "tunnel err:%s\n", line )
             }
@@ -238,7 +244,7 @@ func (self *GIDev) tunnelOne( pair TunPair, onready func() ) {
             log.Printf("%s stopped\n", tunName)
         },
     }
-    proc_generic( self.procTracker, nil, &o )
+    proc_generic( self.device, nil, &o )
 }
 
 func (self *GIDev) tunnelIosif( pairs []TunPair, onready func() ) {
@@ -273,13 +279,13 @@ func (self *GIDev) tunnelIosif( pairs []TunPair, onready func() ) {
       }
     },
     stderrHandler: func( line string, plog *log.Entry ) {
-      //fmt.Printf( "tunnel err:%s\n", line )
+      fmt.Printf( "tunnel err:%s\n", line )
     },
     onStop: func( interface{} ) {
       log.Printf("%s stopped\n", tunName)
     },
   }
-  proc_generic( self.procTracker, nil, &o )
+  proc_generic( self.device, nil, &o )
 }
 
 /*func (self *GIDev) tunnel( pairs []TunPair, onready func() ) {
@@ -760,7 +766,7 @@ func (self *GIDev) cfaGoIos( onStart func(), onStop func(interface{}) ) {
     }
     
     fmt.Fprintf( f, "Starting CFA via %s with args %s\n", "bin/go-ios", strings.Join( args, " " ) )
-    fmt.Printf( "Starting CFA via %s with args %s\n", "bin/go-ios", strings.Join( args, " " ) )
+    //fmt.Printf( "Starting CFA via %s with args %s\n", "bin/go-ios", strings.Join( args, " " ) )
     
     o := ProcOptions {
         procName: "cfa",
@@ -800,7 +806,7 @@ func (self *GIDev) cfaGoIos( onStart func(), onStop func(interface{}) ) {
         },
     }
     
-    proc_generic( self.procTracker, nil, &o )
+    proc_generic( self.device, nil, &o )
 }
 
 func (self *GIDev) wdaGoIos( onStart func(), onStop func(interface{}) ) {
@@ -855,7 +861,7 @@ func (self *GIDev) wdaGoIos( onStart func(), onStop func(interface{}) ) {
         },
     }
     
-    proc_generic( self.procTracker, nil, &o )
+    proc_generic( self.device, nil, &o )
 }
 
 func (self *GIDev) cfaTidevice( onStart func(), onStop func(interface{}) ) {
@@ -921,7 +927,7 @@ func (self *GIDev) cfaTidevice( onStart func(), onStop func(interface{}) ) {
         },
     }
     
-    proc_generic( self.procTracker, nil, &o )
+    proc_generic( self.device, nil, &o )
 }
 
 func (self *GIDev) wdaTidevice( onStart func(), onStop func(interface{}) ) {
@@ -987,7 +993,7 @@ func (self *GIDev) wdaTidevice( onStart func(), onStop func(interface{}) ) {
         },
     }
     
-    proc_generic( self.procTracker, nil, &o )
+    proc_generic( self.device, nil, &o )
 }
 
 func (self *GIDev) cfaIosif( onStart func(), onStop func(interface{}) ) {
@@ -1042,7 +1048,7 @@ func (self *GIDev) cfaIosif( onStart func(), onStop func(interface{}) ) {
         },
     }
     
-    proc_generic( self.procTracker, nil, &o )
+    proc_generic( self.device, nil, &o )
 }
 
 func (self *GIDev) wdaIosif( onStart func(), onStop func(interface{}) ) {
@@ -1096,7 +1102,7 @@ func (self *GIDev) wdaIosif( onStart func(), onStop func(interface{}) ) {
         },
     }
     
-    proc_generic( self.procTracker, nil, &o )
+    proc_generic( self.device, nil, &o )
 }
 
 func (self *GIDev) destroy() {
