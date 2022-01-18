@@ -23,6 +23,7 @@ type CDevice struct {
 	controlCenterMethod string
 	ccRecordingMethod   string
 	videoMode           string
+	keyMethod           string
 }
 
 type AlertConfig struct {
@@ -60,7 +61,6 @@ type Config struct {
 	vidAlerts       []AlertConfig
 	idList          []string
 	cpuProfile      bool
-	ignoreApps      []string
 }
 
 func GetStr(root uj.JNode, path string) string {
@@ -86,18 +86,6 @@ func GetInt(root uj.JNode, path string) int {
 		os.Exit(1)
 	}
 	return node.Int()
-}
-
-func GetArray(root uj.JNode, nodeName string) []string {
-	res := []string{}
-	node := root.Get(nodeName)
-	if node == nil {
-		return res
-	}
-	node.ForEach(func(node uj.JNode) {
-		res = append(res, node.String())
-	})
-	return res
 }
 
 func NewConfig(configPath string, defaultsPath string, calculatedPath string) *Config {
@@ -149,7 +137,6 @@ func NewConfig(configPath string, defaultsPath string, calculatedPath string) *C
 
 	config.alerts = readAlerts(root, "alerts")
 	config.vidAlerts = readAlerts(root, "vidStartAlerts")
-	config.ignoreApps = GetArray(root, "ignoreApps")
 
 	return &config
 }
@@ -189,6 +176,7 @@ func readDevs(root uj.JNode) map[string]CDevice {
 			ccRecordingMethod := "longTouch"
 			tunnelMethod := "go-ios"
 			videoMode := "app"
+			keyMethod := "base" // or "app"
 			if widthNode != nil {
 				uiWidth = widthNode.Int()
 			}
@@ -228,6 +216,10 @@ func readDevs(root uj.JNode) map[string]CDevice {
 			if videoModeNode != nil {
 				videoMode = videoModeNode.String()
 			}
+			keyMethodNode := devNode.Get("keyMethod")
+			if keyMethodNode != nil {
+				keyMethod = keyMethodNode.String()
+			}
 
 			dev := CDevice{
 				udid:                udid,
@@ -235,6 +227,7 @@ func readDevs(root uj.JNode) map[string]CDevice {
 				uiHeight:            uiHeight,
 				cfaMethod:           cfaMethod,
 				wdaMethod:           wdaMethod,
+				keyMethod:           keyMethod,
 				wdaPort:             wdaPort,
 				vidStartMethod:      vidStartMethod,
 				controlCenterMethod: controlCenterMethod,

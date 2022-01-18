@@ -3,15 +3,18 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	uj "github.com/nanoscopic/ujsonin/v2/mod"
 	log "github.com/sirupsen/logrus"
 	"go.nanomsg.org/mangos/v3"
 	nanoReq "go.nanomsg.org/mangos/v3/protocol/req"
+	//nanoRep  "go.nanomsg.org/mangos/v3/protocol/rep"
 )
 
 type CFA struct {
@@ -24,14 +27,19 @@ type CFA struct {
 	//sessionId     string
 	startChan     chan int
 	js2hid        map[int]int
+	specialKeys   map[int]int
 	transport     *http.Transport
 	client        *http.Client
 	nngPort       int
 	nngPort2      int
+	keyPort       int
 	nngSocket     mangos.Socket
 	nngSocket2    mangos.Socket
+	keySocket     mangos.Socket
 	disableUpdate bool
 	sessionMade   bool
+	keyActive     bool
+	keyLock       *sync.Mutex
 }
 
 func NewCFA(config *Config, devTracker *DeviceTracker, dev *Device) *CFA {
@@ -58,17 +66,23 @@ func addrange(amap map[int]int, from1 int, to1 int, from2 int) {
 
 func NewCFANoStart(config *Config, devTracker *DeviceTracker, dev *Device) *CFA {
 	jh := make(map[int]int)
+	special := make(map[int]int)
+	//devConfig := dev.devConfig
 
 	self := CFA{
 		udid:       dev.udid,
 		nngPort:    dev.cfaNngPort,
 		nngPort2:   dev.cfaNngPort2,
+		keyPort:    dev.keyPort,
 		devTracker: devTracker,
 		dev:        dev,
 		config:     config,
 		//base:          fmt.Sprintf("http://127.0.0.1:%d",dev.wdaPort),
-		js2hid:    jh,
-		transport: &http.Transport{},
+		js2hid:      jh,
+		specialKeys: special,
+		transport:   &http.Transport{},
+		keyActive:   false,
+		keyLock:     &sync.Mutex{},
 	}
 	//self.client = &http.Client{
 	//    Transport: self.transport,
@@ -103,7 +117,9 @@ func NewCFANoStart(config *Config, devTracker *DeviceTracker, dev *Device) *CFA 
 	jh[93] = 0x30              // ]
 	//jh[96] = // `
 
-	jh[-8] = 0x2a  // backspace
+	jh[-8] = 0x2a // backspace
+	special[-8] = 0x2a
+
 	jh[-9] = 0x2b  // tab
 	jh[-13] = 0x28 // enter
 	jh[-27] = 0x29 // esc
@@ -113,10 +129,15 @@ func NewCFANoStart(config *Config, devTracker *DeviceTracker, dev *Device) *CFA 
 	jh[-36] = 0x4a // home
 
 	jh[-37] = 0x50 // left
+	special[-37] = 0x50
 	jh[-38] = 0x52 // up
+	special[-38] = 0x52
 	jh[-39] = 0x4f // right
+	special[-39] = 0x4f
 	jh[-40] = 0x51 // down
+	special[-40] = 0x51
 	jh[-46] = 0x4c // delete
+	special[-46] = 0x4c
 
 	return &self
 }
@@ -157,10 +178,45 @@ func (self *CFA) dialNng(port int) (mangos.Socket, int, chan bool) {
 	return reqSock, 0, stopChan
 }
 
+/*func (self *CFA) listenNng( port int, timeoutMs int ) ( mangos.Socket, int ) {
+    spec := fmt.Sprintf( "tcp://127.0.0.1:%d", port )
+
+    var err error
+    var repSock mangos.Socket
+
+    if repSock, err = nanoRep.NewSocket(); err != nil {
+        log.WithFields( log.Fields{
+            "type":     "err_socket_new",
+            "zmq_spec": spec,
+            "err":      err,
+        } ).Info("Socket new error")
+        return nil, 1
+    }
+
+    repSock.SetOption( mangos.OptionRecvDeadline, time.Duration( timeoutMs ) * time.Millisecond )
+
+    if err = repSock.Listen( spec ); err != nil {
+        log.WithFields( log.Fields{
+            "type": "err_socket_listen",
+            "spec": spec,
+            "err":  err,
+        } ).Info("Socket listen error")
+        return nil, 2
+    }
+
+    return repSock, 0
+}*/
+
 func (self *CFA) startCfaNng(onready func(int, chan bool)) {
 	pairs := []TunPair{
 		TunPair{from: self.nngPort, to: 8101},
 		TunPair{from: self.nngPort2, to: 8102},
+	}
+
+	if self.keyPort != 0 {
+		pairs = append(pairs,
+			TunPair{from: self.keyPort, to: 8087},
+		)
 	}
 
 	self.dev.bridge.tunnel(pairs, func() {
@@ -178,6 +234,11 @@ func (self *CFA) startCfaNng(onready func(int, chan bool)) {
 		}
 		self.nngSocket2 = nngSocket2
 
+		if self.keyPort != 0 {
+			/*success := */ self.keyConnectTest()
+			//if !success { onready( err, nil ) }
+		}
+
 		self.create_session("")
 		if onready != nil {
 			onready(0, stopChan)
@@ -189,6 +250,12 @@ func (self *CFA) start(started func(int, chan bool)) {
 	pairs := []TunPair{
 		TunPair{from: self.nngPort, to: 8101},
 		TunPair{from: self.nngPort2, to: 8102},
+	}
+
+	if self.keyPort != 0 {
+		pairs = append(pairs,
+			TunPair{from: self.keyPort, to: 8087},
+		)
 	}
 
 	self.dev.bridge.tunnel(pairs, func() {
@@ -221,6 +288,15 @@ func (self *CFA) start(started func(int, chan bool)) {
 						"type": "cfa_nng2_dialed",
 						"port": self.nngPort2,
 					}).Debug("WDA - NNG2 Dialed")
+				} else {
+					log.WithFields(log.Fields{
+						"type": "cfa_nng2_dial_fail",
+						"port": self.nngPort2,
+					}).Debug("WDA - NNG2 Dial Failed")
+				}
+
+				if self.keyPort != 0 {
+					self.keyConnectTest()
 				}
 
 				if err1 != 0 || err2 != 0 {
@@ -246,7 +322,128 @@ func (self *CFA) start(started func(int, chan bool)) {
 	})
 }
 
+/*func (self *CFA) keyListen2() bool {
+    keySocket, err := self.listenNng( self.keyPort2, 10 )
+    if err == 0 {
+        self.keySocket2 = keySocket
+        log.WithFields( log.Fields{
+            "type": "key_nng_listened",
+            "port": self.keyPort2,
+        } ).Info("Key - NNG Listened")
+        self.done = false
+        self.keyListen2()
+
+        // Attempt to connect to keyboard in case it is already active
+
+        return true
+    } else {
+        log.WithFields( log.Fields{
+            "type": "key_nng_listen_fail",
+            "port": self.keyPort2,
+        } ).Error("Key - NNG Listen Fail")
+    }
+    return false
+}*/
+
+func (self *CFA) keyStop() {
+	self.keyActive = false
+}
+
+func (self *CFA) keyConnectTest() {
+	go func() {
+		conn, err := net.Dial("tcp", fmt.Sprintf(":%d", self.keyPort))
+		if err != nil {
+			log.WithFields(log.Fields{
+				"type": "key_nng_connect_test_fail",
+				"port": self.keyPort,
+			}).Error("Key - NNG Connect TestFail")
+			return
+		}
+		conn.Close()
+		log.WithFields(log.Fields{
+			"type": "key_nng_connect_test_pass",
+			"port": self.keyPort,
+		}).Info("Key - NNG Connect Test Pass")
+		self.keyConnect()
+	}()
+}
+
+func (self *CFA) keyConnect() {
+	go func() {
+		if self.keyActive {
+			return
+		}
+
+		keySocket, err, _ := self.dialNng(self.keyPort)
+		if err == 0 {
+			self.keySocket = keySocket
+			log.WithFields(log.Fields{
+				"type": "key_nng_connect",
+				"port": self.keyPort,
+			}).Info("Key - NNG Connected")
+			self.keyActive = true
+			self.keyHealthPing()
+
+			// Attempt to connect to keyboard in case it is already active
+
+			return
+		} else {
+			log.WithFields(log.Fields{
+				"type": "key_nng_connect_fail",
+				"port": self.keyPort,
+			}).Error("Key - NNG Connect Fail")
+		}
+		return
+	}()
+}
+
+func (self *CFA) keyHealthPing() {
+	go func() {
+		for {
+			self.keyLock.Lock()
+			self.keySocket.Send([]byte("ping"))
+			_, err := self.keySocket.Recv()
+			self.keyLock.Unlock()
+
+			/*if resp != nil {
+			    fmt.Printf("key ping resp:%s\n", string( resp ) )
+			}*/
+
+			if !self.keyActive {
+				break
+			}
+			if err != nil {
+				self.keyActive = false
+				break
+			}
+			time.Sleep(time.Millisecond * 100)
+		}
+
+		log.WithFields(log.Fields{
+			"type": "key_nng_gone",
+		}).Info("Key - NNG Health Failed")
+	}()
+
+}
+
+/*func (self *CFA) keyListen2() {
+    go func() { for {
+        bytes, err := self.keySocket2.Recv()
+        if err != nil {
+            if err == mangos.ErrRecvTimeout {
+                if self.done { break }
+                continue
+            }
+            time.Sleep( time.Millisecond * 10 )
+            break
+        }
+        fmt.Printf("Key message: %s\n", string( bytes ) )
+        self.keySocket2.Send([]byte("ok"))
+    } }()
+}*/
+
 func (self *CFA) stop() {
+	self.keyActive = false
 	if self.cfaProc != nil {
 		self.cfaProc.Kill()
 		self.cfaProc = nil
@@ -427,11 +624,20 @@ func (self *CFA) keys(codes []int) {
 	   method uses the much slower [application typeType] method.
 	*/
 	if self.config.cfaKeyMethod == "iohid" {
-		dest, ok := self.js2hid[code]
-		if ok {
-			self.keysViaIohid([]int{dest})
+		if self.keyActive {
+			ioCode, isSpecial := self.specialKeys[code]
+			if isSpecial {
+				self.keysViaIohid([]int{ioCode})
+			} else {
+				self.typeText(codes)
+			}
 		} else {
-			self.typeText(codes)
+			dest, ok := self.js2hid[code]
+			if ok {
+				self.keysViaIohid([]int{dest})
+			} else {
+				self.typeText(codes)
+			}
 		}
 	} else {
 		self.typeText(codes)
@@ -439,26 +645,8 @@ func (self *CFA) keys(codes []int) {
 }
 
 func (self *CFA) keysViaIohid(codes []int) {
-	/*
-	   This loop of making repeated calls is obviously quite garbage.
-	   A better solution would be to make a call in CFA itself able to handle
-	   multiple characters at once.
-
-	   Despite this the performIoHidEvent call is very fast so it can generally
-	   keep up with typing speed of a manual user of CF.
-	*/
 	for _, code := range codes {
-		json := fmt.Sprintf(`{
-          action: "iohid"
-          page: 7
-          usage: %d
-          duration: 0.05
-        }`, code)
-
-		log.Info("sending " + json)
-
-		self.nngSocket.Send([]byte(json))
-		self.nngSocket.Recv()
+		self.ioHid(7, code)
 	}
 }
 
@@ -476,41 +664,53 @@ func (self *CFA) ioHid(page int, code int) {
 	self.nngSocket.Recv()
 }
 
-func (self *CFA) typeText(codes []int) {
-	strArr := []string{}
-
-	for _, code := range codes {
-		// GoLang encodes to utf8 by default. typeText call expects utf8 encoding
-		strArr = append(strArr, fmt.Sprintf("%c", rune(code)))
-	}
-
-	json := fmt.Sprintf(`{
-        action: "typeText"
-        text: "%s"
-    }`, strings.Join(strArr, ""))
-
-	log.Info("sending " + json)
-
-	self.nngSocket.Send([]byte(json))
-	self.nngSocket.Recv()
-}
-
 type CfaText struct {
 	Action string `json:"action"`
 	Text   string `json:"text"`
 }
 
-func (self *CFA) text(text string) {
-	msg := CfaText{
-		Action: "typeText",
-		Text:   text,
+func (self *CFA) typeText(codes []int) {
+	strArr := []string{}
+
+	for _, code := range codes {
+		if code < 0 {
+			code = -code
+		}
+		//fmt.Printf("code is %d\n", code )
+		// GoLang encodes to utf8 by default. typeText call expects utf8 encoding
+		strArr = append(strArr, fmt.Sprintf("%c", rune(code)))
 	}
-	bytes, _ := json.Marshal(msg)
+	str := strings.Join(strArr, "")
 
-	log.Info("sending " + string(bytes))
+	self.text(str)
+}
 
-	self.nngSocket.Send(bytes)
-	self.nngSocket.Recv()
+func (self *CFA) text(text string) {
+	if self.keyActive {
+		msg := CfaText{
+			Action: "insert",
+			Text:   text,
+		}
+		bytes, _ := json.Marshal(msg)
+
+		log.Info("sending to keyApp: " + string(bytes))
+
+		self.keyLock.Lock()
+		self.keySocket.Send(bytes)
+		self.keySocket.Recv()
+		self.keyLock.Unlock()
+	} else {
+		msg := CfaText{
+			Action: "typeText",
+			Text:   text,
+		}
+		bytes, _ := json.Marshal(msg)
+
+		log.Info("sending " + string(bytes))
+
+		self.nngSocket.Send(bytes)
+		self.nngSocket.Recv()
+	}
 }
 
 func (self *CFA) swipe(x1 int, y1 int, x2 int, y2 int, delay float64) {
@@ -688,6 +888,10 @@ func (self *CFA) ToLauncher() string {
 }
 
 func (self *CFA) Screenshot() []byte {
+	if self.nngSocket2 == nil {
+		log.Error("Could not get screenshot via NNG2: no socket")
+		return []byte{}
+	}
 	self.nngSocket2.Send([]byte(`{ action: "screenshot2" }`))
 	imgBytes, _ := self.nngSocket2.Recv()
 
@@ -944,6 +1148,19 @@ func (self *CFA) LaunchSafariUrl(url string) {
 	msg := CFR_LaunchSafariUrl{
 		Action: "launchsafariurl",
 		Url:    url,
+	}
+	bytes, _ := json.Marshal(msg)
+
+	log.Info("sending " + string(bytes))
+
+	self.nngSocket.Send(bytes)
+	self.nngSocket.Recv()
+}
+
+func (self *CFA) CleanBrowserData(bid string) {
+	msg := CFR_CleanBrowserData{
+		Action: "cleanbrowser",
+		Bid:    bid,
 	}
 	bytes, _ := json.Marshal(msg)
 

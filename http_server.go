@@ -28,17 +28,8 @@ func startServer(devTracker *DeviceTracker, listen_addr string) {
 		onBackupFrame(w, r, devTracker)
 	}
 
-	sessionStart := func(w http.ResponseWriter, r *http.Request) {
-		startDeviceSession(w, r, devTracker)
-	}
-	sessionStop := func(w http.ResponseWriter, r *http.Request) {
-		stopDeviceSession(w, r, devTracker)
-	}
-
 	http.HandleFunc("/frame", frameClosure)
 	http.HandleFunc("/backupFrame", backupFrameClosure)
-	http.HandleFunc("/sessionStart", sessionStart)
-	http.HandleFunc("/sessionStop", sessionStop)
 
 	err := http.ListenAndServe(listen_addr, nil)
 	log.WithFields(log.Fields{
@@ -65,52 +56,6 @@ func firstFrameJSON(devTracker *DeviceTracker, bytes []byte) {
 		dev := devTracker.DevMap[uuid]
 		dev.EventCh <- devEvent
 	}
-}
-
-func startDeviceSession(w http.ResponseWriter, r *http.Request, devTracker *DeviceTracker) {
-	r.ParseForm()
-	udid := r.Form.Get("udid")
-	if udid == "" {
-		fmt.Fprintf(w, "Start Session Udid not set\n")
-		return
-	}
-
-	fmt.Printf("setting session flag: %s\n", udid)
-
-	dev := devTracker.getDevice(udid)
-	if dev == nil {
-		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprintf(w, "Could not find device with udid: %s<br>", udid)
-		fmt.Fprintf(w, "Available UDID:<br>")
-		for _, key := range devTracker.DevMap {
-			fmt.Fprintf(w, "%s<br>", key)
-		}
-		return
-	}
-	dev.sessionActive = true
-}
-
-func stopDeviceSession(w http.ResponseWriter, r *http.Request, devTracker *DeviceTracker) {
-	r.ParseForm()
-	udid := r.Form.Get("udid")
-	if udid == "" {
-		fmt.Fprintf(w, "Stop Session Udid not set\n")
-		return
-	}
-
-	fmt.Printf("setting session flag: %s\n", udid)
-
-	dev := devTracker.getDevice(udid)
-	if dev == nil {
-		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprintf(w, "Could not find device with udid: %s<br>", udid)
-		fmt.Fprintf(w, "Available UDID:<br>")
-		for _, key := range devTracker.DevMap {
-			fmt.Fprintf(w, "%s<br>", key)
-		}
-		return
-	}
-	dev.sessionActive = false
 }
 
 func onFrame(w http.ResponseWriter, r *http.Request, devTracker *DeviceTracker) {

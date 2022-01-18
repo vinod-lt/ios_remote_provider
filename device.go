@@ -9,10 +9,8 @@ import (
 
 	ws "github.com/gorilla/websocket"
 	uj "github.com/nanoscopic/ujsonin/v2/mod"
+	"github.com/pion/webrtc/v3"
 	log "github.com/sirupsen/logrus"
-	//uj "github.com/nanoscopic/ujsonin/v2/mod"
-	//"go.nanomsg.org/mangos/v3"
-	//nanoReq  "go.nanomsg.org/mangos/v3/protocol/req"
 )
 
 const (
@@ -42,18 +40,18 @@ const (
 )
 
 type Device struct {
-	udid            string
-	name            string
-	lock            *sync.Mutex
-	wdaPort         int
-	wdaPortFixed    bool
-	cfaNngPort      int
-	cfaNngPort2     int
-	vidPort         int
-	vidControlPort  int
-	vidLogPort      int
-	backupVideoPort int
-	//mjpegVideoPort  int
+	udid              string
+	name              string
+	lock              *sync.Mutex
+	wdaPort           int
+	wdaPortFixed      bool
+	cfaNngPort        int
+	cfaNngPort2       int
+	keyPort           int
+	vidPort           int
+	vidControlPort    int
+	vidLogPort        int
+	backupVideoPort   int
 	iosVersion        string
 	versionParts      []int
 	productType       string
@@ -85,14 +83,15 @@ type Device struct {
 	shuttingDown      bool
 	alertMode         bool
 	vidUp             bool
-	sessionActive     bool // if session is actively used LT change
 	restrictedApps    []string
+	rtcChan           *webrtc.DataChannel
+	rtcPeer           *webrtc.PeerConnection
+	imgId             int
 }
 
 func NewDevice(config *Config, devTracker *DeviceTracker, udid string, bdev BridgeDev) *Device {
 	dev := Device{
-		devTracker: devTracker,
-		//wdaPort:         devTracker.getPort(),
+		devTracker:      devTracker,
 		wdaPortFixed:    false,
 		cfaNngPort:      devTracker.getPort(),
 		cfaNngPort2:     devTracker.getPort(),
@@ -101,20 +100,20 @@ func NewDevice(config *Config, devTracker *DeviceTracker, udid string, bdev Brid
 		vidMode:         VID_NONE,
 		vidControlPort:  devTracker.getPort(),
 		backupVideoPort: devTracker.getPort(),
-		//mjpegVideoPort:  devTracker.getPort(),
-		backupActive:   false,
-		config:         config,
-		udid:           udid,
-		lock:           &sync.Mutex{},
-		process:        make(map[string]*GenericProc),
-		cf:             devTracker.cf,
-		EventCh:        make(chan DevEvent),
-		BackupCh:       make(chan BackupEvent),
-		CFAFrameCh:     make(chan BackupEvent),
-		bridge:         bdev,
-		cfaRunning:     false,
-		versionParts:   []int{0, 0, 0},
-		restrictedApps: getApps(udid),
+		backupActive:    false,
+		config:          config,
+		udid:            udid,
+		lock:            &sync.Mutex{},
+		process:         make(map[string]*GenericProc),
+		cf:              devTracker.cf,
+		EventCh:         make(chan DevEvent),
+		BackupCh:        make(chan BackupEvent),
+		CFAFrameCh:      make(chan BackupEvent),
+		bridge:          bdev,
+		cfaRunning:      false,
+		versionParts:    []int{0, 0, 0},
+		restrictedApps:  getApps(udid),
+		imgId:           1,
 	}
 	if devConfig, ok := config.devs[udid]; ok {
 		dev.devConfig = &devConfig
@@ -124,6 +123,14 @@ func NewDevice(config *Config, devTracker *DeviceTracker, udid string, bdev Brid
 		} else {
 			dev.wdaPort = devTracker.getPort()
 		}
+
+		keyMethod := devConfig.keyMethod
+		if keyMethod == "base" {
+			dev.keyPort = 0
+		} else if keyMethod == "app" {
+			dev.keyPort = devTracker.getPort()
+		}
+
 	} else {
 		dev.wdaPort = devTracker.getPort()
 	}
@@ -145,6 +152,9 @@ func (self *Device) releasePorts() {
 	dt.freePort(self.vidLogPort)
 	dt.freePort(self.vidControlPort)
 	dt.freePort(self.backupVideoPort)
+	if self.keyPort != 0 {
+		dt.freePort(self.keyPort)
+	}
 }
 
 func (self *Device) startProc(proc *GenericProc) {
@@ -369,7 +379,7 @@ func (self *Device) sendBackupFrame() {
 
 func (self *Device) sendCFAFrame() {
 	vidOut := self.vidOut
-	if vidOut != nil {
+	if vidOut != nil || self.rtcChan != nil {
 		start := time.Now().UnixMilli()
 		pngData := self.cfa.Screenshot()
 		end := time.Now().UnixMilli()
@@ -380,7 +390,11 @@ func (self *Device) sendCFAFrame() {
 		}
 		//fmt.Printf("%d bytes\n", len( pngData ) )
 		if len(pngData) > 0 {
-			vidOut.WriteMessage(ws.BinaryMessage, pngData)
+			if self.rtcChan != nil {
+				self.sendMulti(pngData)
+			} else {
+				vidOut.WriteMessage(ws.BinaryMessage, pngData)
+			}
 		}
 	} else {
 		time.Sleep(time.Millisecond * 100)
@@ -518,6 +532,12 @@ func (self *Device) startProcs() {
 			if strings.HasPrefix(msg, "Foreground apps changed") {
 				//fmt.Printf("App changed\n")
 				//self.EventCh <- DevEvent{ action: DEV_APP_CHANGED }
+			}
+		} else if app == "CFAgent-Runner(CFAgentLib)" {
+			if strings.HasPrefix(msg, "keyxr keyboard ready") {
+				self.cfa.keyConnect()
+			} else if strings.HasPrefix(msg, "keyxr keyboard vanished") {
+				self.cfa.keyStop()
 			}
 		}
 	})
@@ -1019,6 +1039,150 @@ func (self *Device) allowApp(bid string) {
 	self.restrictedApps = newList
 }
 
+func (self *Device) onRtcMsg(msg webrtc.DataChannelMessage) {
+	/*
+	   fmt.Printf("Message from DataChannel '%s': '%s'\n", d.Label(), string(msg.Data))
+	*/
+}
+
+func (self *Device) onRtcOpen(rtcChan *webrtc.DataChannel) {
+	/*
+	   sendErr := d.SendText(message)
+	               if sendErr != nil {
+	                   panic(sendErr)
+	               }
+	*/
+	self.rtcChan = rtcChan
+	self.startVidStreamRtc()
+}
+
+func (self *Device) onRtcExit() {
+	self.rtcChan = nil
+}
+
+func (self *Device) sendMulti(data []byte) {
+	chunkMax := 16000
+
+	size := len(data)
+	//dSize := size
+
+	thisId := self.imgId
+	self.imgId++
+
+	if size == 0 {
+		return
+	}
+
+	//fmt.Printf("Total len: %d\n", size )
+	count := 0
+	for {
+		if size > chunkMax {
+			size -= chunkMax
+		} else {
+			count++
+			break
+		}
+		count++
+	}
+
+	size = len(data)
+	start := 0
+	pieceNum := 1
+
+	//tot := 0
+	for {
+		partSize := 0
+		if size > chunkMax {
+			partSize = chunkMax
+			size -= chunkMax
+		} else {
+			partSize = size
+			size = 0
+		}
+
+		//fmt.Printf( "start: %d - part: %d - len: %d\n", start, part, size )
+
+		piece := data[start : start+partSize]
+		//tot += len( piece )
+
+		/*info := fmt.Sprintf( "%d/%d", pieceNum, count )
+		  info = info + strings.Repeat( " ", 10-len(info) )*/
+
+		info := fmt.Sprintf("[%d,%d,%d,%d]", pieceNum, count, thisId, partSize)
+		info = info + strings.Repeat(" ", 60-len(info))
+
+		dup := make([]byte, len(piece))
+		copy(dup, piece)
+		dup = append(dup, []byte(info)...)
+		//fmt.Printf("Sent %d/%d - %d\n", pieceNum, count, part )
+		self.rtcChan.Send(dup)
+
+		if size == 0 {
+			break
+		} else {
+			start += partSize
+		}
+		pieceNum++
+	}
+	//fmt.Printf("%d - %d\n",len(data), tot )
+}
+
+func (self *Device) startVidStreamRtc() {
+	imgData := self.cfa.Screenshot()
+	//self.rtcChan.Send( imgData )
+	//self.rtcChan.SendText("test")
+	self.sendMulti(imgData)
+
+	var controlChan chan int
+	if self.vidStreamer != nil {
+		controlChan = self.vidStreamer.getControlChan()
+	}
+
+	//self.vidOut = conn
+
+	imgConsumer := NewImageConsumer(func(text string, data []byte) error {
+		if self.vidMode != VID_APP {
+			return nil
+		}
+		//conn.WriteMessage( ws.TextMessage, []byte( text ) )
+		//return conn.WriteMessage( ws.BinaryMessage, data )
+		//self.rtcChan.Send( data )
+		self.sendMulti(data)
+		return nil
+	}, func() {
+		// there are no frames to send
+	})
+
+	if self.vidStreamer != nil {
+		self.vidStreamer.setImageConsumer(imgConsumer)
+		fmt.Printf("Telling video stream to start\n")
+		controlChan <- 1 // start
+	}
+}
+
+func (self *Device) initWebrtc(offer string) string {
+	fmt.Printf("Running initWebrt\n")
+	peer, answer := startWebRtc(
+		offer,
+		func(msg webrtc.DataChannelMessage) { // onMsg
+			//fmt.Printf("Running initWebrt\n")
+			self.onRtcMsg(msg)
+		},
+		func(d *webrtc.DataChannel) { // onOpen
+			fmt.Printf("Running initWebrtc - onOpen\n")
+			self.onRtcOpen(d)
+		},
+		func() { // onExit
+			fmt.Printf("Running initWebrtc - onExit\n")
+			self.onRtcExit()
+		},
+	)
+	fmt.Printf("Running initWebrt - Got answer\n")
+	self.rtcPeer = peer
+
+	return answer
+}
+
 //LT Changes
 func (self *Device) Refresh() string {
 	return self.cfa.Refresh()
@@ -1029,4 +1193,8 @@ func (self *Device) Restart() string {
 
 func (self *Device) LaunchSafariUrl(url string) {
 	self.cfa.LaunchSafariUrl(url)
+}
+
+func (self *Device) CleanBrowserData(bid string) {
+	self.cfa.CleanBrowserData(bid)
 }
