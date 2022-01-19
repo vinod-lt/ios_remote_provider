@@ -41,6 +41,7 @@ type GenericProc struct {
     backoff   *Backoff
     pid       int
     cmd       *gocmd.Cmd
+    end       bool
 }
 
 func (self *GenericProc) Kill() {
@@ -157,6 +158,7 @@ func proc_generic( procTracker ProcTracker, wrapper interface{}, opt *ProcOption
                     "text": errText,
                 } ).Error("Error starting - " + opt.procName)
                 
+                procTracker.stopProc( proc.name )
                 return
             }
             
@@ -179,6 +181,7 @@ func proc_generic( procTracker ProcTracker, wrapper interface{}, opt *ProcOption
                     "text": errText,
                 } ).Error("Error starting - " + opt.procName)
                 
+                procTracker.stopProc( proc.name )
                 return
             }
             
@@ -206,13 +209,20 @@ func proc_generic( procTracker ProcTracker, wrapper interface{}, opt *ProcOption
                 case <- statCh:
                     runDone = true
                 case msg := <- controlCh:
-                    plog.Debug("Got stop request on control channel")
+                    fmt.Printf("Got stop cmd pid=%d\n",proc.pid)
                     if msg.msgType == 1 { // stop
                         stop = true
-                        proc.cmd.Stop()
+                        //proc.cmd.Stop()
+                        //time.Sleep( 100 * time.Millisecond )
+                        death_to_proc( proc.pid )
+                        procTracker.stopProc( proc.name )
                     } else if msg.msgType == 2 { // restart
-                        proc.cmd.Stop()
+                        //proc.cmd.Stop()
+                        //time.Sleep( 100 * time.Millisecond )
+                        death_to_proc( proc.pid )
+                        procTracker.stopProc( proc.name )
                     }
+                    runDone = true
                 case line, _ := <- outStream:
                     if line == "" { continue }
                     if opt.stdoutHandler != nil {
@@ -236,7 +246,9 @@ func proc_generic( procTracker ProcTracker, wrapper interface{}, opt *ProcOption
         
         backoff.markEnd()
 
-        plog.WithFields( log.Fields{ "type": "proc_end" } ).Warn("Process end - "+ opt.procName)
+        if !stop && !proc.end {
+            plog.WithFields( log.Fields{ "type": "proc_end" } ).Warn("Process end - "+ opt.procName)
+        }
         
         if opt.onStop != nil {
             opt.onStop( wrapper )
@@ -247,7 +259,7 @@ func proc_generic( procTracker ProcTracker, wrapper interface{}, opt *ProcOption
             break
         }
         
-        if stop { break }
+        if stop || proc.end { break }
         
         if !opt.noWait {
             backoff.wait()

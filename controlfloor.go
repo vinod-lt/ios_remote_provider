@@ -657,10 +657,9 @@ func (self *ControlFloor) baseNotify(name string, udid string, variant string, v
 		}).Error(fmt.Sprintf("Failure notifying CF of %s", name))
 	} else {
 		log.WithFields(log.Fields{
-			"type":   "cf_notify",
-			"name":   name,
-			"udid":   censorUuid(udid),
-			"values": vals,
+			"type": "cf_notify",
+			"name": name,
+			"udid": censorUuid(udid),
 		}).Info(fmt.Sprintf("Notifying CF of %s", name))
 	}
 }
