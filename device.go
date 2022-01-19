@@ -181,21 +181,27 @@ type DevEvent struct {
 }
 
 func (self *Device) shutdown() {
-	self.shutdownVidStream()
+	go func() { self.shutdownVidStream() }()
 
 	go func() { self.endProcs() }()
 
 	go func() { self.EventCh <- DevEvent{action: DEV_STOP} }()
 	go func() { self.BackupCh <- BackupEvent{action: VID_END} }()
 
-	for _, proc := range self.process {
+	procDup := make(map[string]*GenericProc)
+	for name, proc := range self.process {
+		procDup[name] = proc
+		proc.end = true
+	}
+	for _, proc := range procDup {
 		log.WithFields(log.Fields{
 			"type": "shutdown_dev_proc",
 			"udid": censorUuid(self.udid),
 			"proc": proc.name,
 			"pid":  proc.pid,
 		}).Info("Shutting down " + proc.name + " process")
-		go func() { proc.Kill() }()
+		//go func() { proc.Kill() }()
+		death_to_proc(proc.pid)
 	}
 }
 
@@ -227,42 +233,47 @@ func (self *Device) onWdaReady() {
 
 func (self *Device) startEventLoop() {
 	go func() {
-	DEVEVENTLOOP:
 		for {
-			select {
-			case event := <-self.EventCh:
-				action := event.action
-				if action == DEV_STOP { // stop event loop
-					break DEVEVENTLOOP
-				} else if action == DEV_CFA_START { // CFA started
-					self.onCfaReady()
-				} else if action == DEV_WDA_START { // CFA started
-					self.onWdaReady()
-				} else if action == DEV_CFA_START_ERR {
-					fmt.Printf("Error starting/connecting to CFA.\n")
-					self.shutdown()
-					break DEVEVENTLOOP
-				} else if action == DEV_CFA_STOP { // CFA stopped
-					self.cfaRunning = false
-					self.cf.notifyCfaStopped(self.udid)
-				} else if action == DEV_CFA_STOP { // CFA stopped
-					self.wdaRunning = false
-					self.cf.notifyWdaStopped(self.udid)
-				} else if action == DEV_VIDEO_START { // first video frame
-					self.cf.notifyVideoStarted(self.udid)
-					self.onFirstFrame(&event)
-				} else if action == DEV_VIDEO_STOP {
-					self.cf.notifyVideoStopped(self.udid)
-				} else if action == DEV_ALERT_APPEAR {
-					self.enableBackupVideo()
-				} else if action == DEV_ALERT_GONE {
-					self.disableBackupVideo()
-				} else if action == DEV_APP_CHANGED {
-					self.devAppChanged(event.data)
-				}
+			event := <-self.EventCh
+
+			action := event.action
+			if action == DEV_STOP { // stop event loop
+				self.EventCh = nil
+				break
+			} else if action == DEV_CFA_START { // CFA started
+				self.onCfaReady()
+			} else if action == DEV_WDA_START { // CFA started
+				self.onWdaReady()
+			} else if action == DEV_CFA_START_ERR {
+				fmt.Printf("Error starting/connecting to CFA.\n")
+				self.shutdown()
+				break
+			} else if action == DEV_CFA_STOP { // CFA stopped
+				self.cfaRunning = false
+				self.cf.notifyCfaStopped(self.udid)
+			} else if action == DEV_CFA_STOP { // CFA stopped
+				self.wdaRunning = false
+				self.cf.notifyWdaStopped(self.udid)
+			} else if action == DEV_VIDEO_START { // first video frame
+				self.cf.notifyVideoStarted(self.udid)
+				self.onFirstFrame(&event)
+			} else if action == DEV_VIDEO_STOP {
+				self.cf.notifyVideoStopped(self.udid)
+			} else if action == DEV_ALERT_APPEAR {
+				self.enableBackupVideo()
+			} else if action == DEV_ALERT_GONE {
+				self.disableBackupVideo()
+			} else if action == DEV_APP_CHANGED {
+				self.devAppChanged(event.data)
 			}
 		}
+
+		log.WithFields(log.Fields{
+			"type": "dev_event_loop_stop",
+			"udid": censorUuid(self.udid),
+		}).Info("Stopped device event loop")
 	}()
+
 }
 
 func (self *Device) startBackupFrameProvider() {
@@ -964,6 +975,7 @@ func (self *Device) keys(keys string) {
 	codes := []int{}
 	for _, key := range parts {
 		code, _ := strconv.Atoi(key)
+		//fmt.Printf("%s becomes %d\n", key, code )
 		codes = append(codes, code)
 	}
 	self.cfa.keys(codes)

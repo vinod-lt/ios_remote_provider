@@ -80,6 +80,33 @@ func get_procs() []Aproc {
     return procs
 }
 
+func proc_lives( pid int ) bool {
+    procs := get_procs()
+    
+    for _,proc := range procs {
+        if proc.pid == pid {
+            return true
+        }
+    }
+    
+    return false
+}
+
+func death_to_proc( pid int ) {
+    proc_is_alive := proc_lives( pid )
+    
+    if !proc_is_alive {
+        return
+    }
+    
+    /*log.WithFields( log.Fields{
+        "type":  "sigterm_force",
+        "pid": pid,
+    } ).Warn("Proc didn't stop. Killing")*/
+    
+    syscall.Kill( pid, syscall.SIGKILL )
+}
+
 func cleanup_procs( config *Config ) {
     plog := log.WithFields( log.Fields{
         "type": "proc_cleanup",
