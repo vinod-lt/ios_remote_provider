@@ -70,7 +70,7 @@ func NewDeviceTracker( config *Config, detect bool, idList []string ) (*DeviceTr
     self.bridge = bridgeCreator(
         config,
         func( dev BridgeDev ) ProcTracker { return self.onDeviceConnect1( dev ) },
-        func( dev BridgeDev ) { self.onDeviceDisconnect1( dev ) },
+        func( dev BridgeDev ) { self.onDeviceDisconnect( dev ) },
         bridgeCli,
         self,
         detect,
@@ -208,22 +208,24 @@ func (self *DeviceTracker) onDeviceConnect1( bdev BridgeDev ) *Device {
     }
         
     self.cf.notifyDeviceExists( udid, width, height, clickWidth, clickHeight )
-    dev := self.onDeviceConnect( udid, bdev )
+    dev := self.onDeviceConnect2( udid, bdev )
     self.cf.notifyDeviceInfo( dev, mgInfo["ArtworkTraits"] )
     bdev.setProcTracker( self )
     dev.startup()
     return dev
 }
 
-func (self *DeviceTracker) onDeviceDisconnect1( bdev BridgeDev ) {
+func (self *DeviceTracker) onDeviceDisconnect( bdev BridgeDev ) {
     udid := bdev.getUdid()
     dev := self.DevMap[ udid ]
     
-    self.onDeviceDisconnect( dev )
+    dev.connected = false
+    
     dev.stopEventLoop()
     dev.shutdown()
-    
     dev.releasePorts()
+    
+    delete( self.DevMap, udid )
 }
 
 func (self *DeviceTracker) shutdown() {
@@ -254,7 +256,7 @@ func (self *DeviceTracker) shutdown() {
     go func() { self.cfStop <- true }()
 }
 
-func (self *DeviceTracker) onDeviceConnect( uuid string, bdev BridgeDev ) (*Device){
+func (self *DeviceTracker) onDeviceConnect2( uuid string, bdev BridgeDev ) (*Device){
     log.WithFields( log.Fields{
         "type": "dev_present",
         "uuid": censorUuid( uuid ),
@@ -269,11 +271,13 @@ func (self *DeviceTracker) onDeviceConnect( uuid string, bdev BridgeDev ) (*Devi
     bdev.SetDevice( dev )
     
     devInfo := getAllDeviceInfo( bdev )
+    
     log.WithFields( log.Fields{
         "type": "dev_info_full",
         "uuid": censorUuid( uuid ),
         "info": devInfo,
     } ).Debug("Device Info")
+    
     log.WithFields( log.Fields{
         "type": "dev_info_basic",
         "uuid": censorUuid( uuid ),
@@ -301,8 +305,4 @@ func (self *DeviceTracker) onDeviceConnect( uuid string, bdev BridgeDev ) (*Devi
     
     self.DevMap[ uuid ] = dev
     return dev
-}
-
-func (self *DeviceTracker) onDeviceDisconnect( dev *Device ) {
-    dev.connected = false
 }
