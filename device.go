@@ -86,6 +86,7 @@ type Device struct {
     rtcChan         *webrtc.DataChannel
     rtcPeer         *webrtc.PeerConnection
     imgId           int
+    orientation     string
 }
 
 func NewDevice( config *Config, devTracker *DeviceTracker, udid string, bdev BridgeDev ) (*Device) {
@@ -511,7 +512,7 @@ func (self *Device) startProcs() {
             }
         } else if app == "SpringBoard(FrontBoard)" {
             if strings.Contains( msg, "Setting process visibility to: Foreground" ) {
-                fmt.Printf("Process vis line:%s\n", msg )
+                fmt.Printf("Process vis line:%s", msg )
                 appStr := "application<"
                 index := strings.Index( msg, appStr )
                 if index != -1 {
@@ -523,7 +524,7 @@ func (self *Device) startProcs() {
                     pidEndPos := strings.Index( pidStr, "]" )
                     pidStr = pidStr[:pidEndPos]
                     pid, _ := strconv.ParseUint( pidStr, 10, 64 )
-                    fmt.Printf("app - bid:%s pid:%d\n", app, pid )
+                    fmt.Printf("  app - bid:%s pid:%d\n", app, pid )
                     allowed := true
                     for _,restrictedApp := range self.restrictedApps {
                         if restrictedApp == app { allowed = false }
@@ -533,7 +534,24 @@ func (self *Device) startProcs() {
                     } else {
                         self.bridge.Kill( pid )
                     }
+                    
+                    go func() {
+                        time.Sleep( 1000 * time.Millisecond )  
+                        orientation := self.cfa.getOrientation()
+                        fmt.Printf( "  To foreground - App orientation: %s\n", orientation )
+                        self.orientation = orientation
+                        self.devTracker.cf.orientationChange( self.udid, orientation )
+                    }()
                 }
+            }
+            if strings.Contains( msg, "Setting process visibility to: Background" ) {
+                go func() {
+                    time.Sleep( 500 * time.Millisecond )  
+                    orientation := self.cfa.getOrientation()
+                    fmt.Printf( "  To background - App orientation: %s\n", orientation )
+                    self.orientation = orientation
+                    self.devTracker.cf.orientationChange( self.udid, orientation )
+                }()
             }
         } else if app == "dasd" {
             if strings.HasPrefix( msg, "Foreground apps changed" ) {
@@ -545,6 +563,19 @@ func (self *Device) startProcs() {
                 self.cfa.keyConnect()
             } else if strings.HasPrefix( msg, "keyxr keyboard vanished" ) {
                 self.cfa.keyStop()
+            }
+        } else if app == "backboardd" {
+            // "Effective device orientation changed to: portrait (1)"
+            // portrait, landscapeRight, landscapeLeft, portraitUpsideDown
+            if strings.HasPrefix( msg, "Effective device orientation changed" ) {
+                fmt.Printf( "%s", msg )
+                go func() {
+                    time.Sleep( 500 * time.Millisecond )  
+                    orientation := self.cfa.getOrientation()
+                    fmt.Printf( "  App orientation: %s\n", orientation )
+                    self.orientation = orientation
+                    self.devTracker.cf.orientationChange( self.udid, orientation )
+                }()
             }
         }
     } )
@@ -722,7 +753,24 @@ func (self *Device) onFirstFrame( event *DevEvent ) {
     } ).Info("Video - first frame")
 }
 
+func (self *Device) adaptToRotation( x int, y int ) (int,int) {
+    w := self.devConfig.uiWidth
+    h := self.devConfig.uiHeight
+    
+    switch self.orientation {
+        case "portrait":
+        case "portraitUpsideDown":
+            x,y = (w-x),(h-y) 
+        case "landscapeLeft":
+            x,y = y,(h-x)
+        case "landscapeRight":
+            x,y = (w-y),x
+    }
+    return x,y
+}
+
 func (self *Device) clickAt( x int, y int ) {
+    x,y = self.adaptToRotation( x, y )
     self.cfa.clickAt( x, y )
 }
 
@@ -946,6 +994,8 @@ func (self *Device) iohid( page int, code int ) {
 
 func (self *Device) swipe( x1 int, y1 int, x2 int, y2 int, delayBy100 int ) {
     delay := float64( delayBy100 ) / 100.0
+    x1,y1 = self.adaptToRotation( x1, y1 )
+    x2,y2 = self.adaptToRotation( x2, y2 )
     self.cfa.swipe( x1, y1, x2, y2, delay )
 }
 
