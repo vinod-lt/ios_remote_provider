@@ -806,6 +806,15 @@ func (self *CFA) WindowSize() (int, int) {
 	return width, height
 }
 
+func (self *CFA) getOrientation() string {
+    //log.Info("getOrientation")
+    self.nngSocket.Send([]byte(`{ action: "getOrientation" }`))
+    jsonBytes, _ := self.nngSocket.Recv()
+    
+    //log.Info( "  result:", string(jsonBytes) )
+    return string(jsonBytes)
+}
+
 func (self *CFA) Source(bi string, pid int) string {
 	biLine := ""
 	if bi != "" {

@@ -664,6 +664,22 @@ func (self *ControlFloor) baseNotify(name string, udid string, variant string, v
 	}
 }
 
+func (self *ControlFloor) orientationChange(udid string, orientation string) {
+	ok := self.checkLogin()
+	if ok == false {
+		panic("Could not login when notifying of orientation change to '" + orientation + "' notify")
+	}
+
+	resp, _ := self.client.PostForm(self.base+"/provider/device/orientation", url.Values{
+		"udid":        {udid},
+		"orientation": {orientation},
+	})
+
+	// Ensure the request is closed out
+	defer resp.Body.Close()
+	ioutil.ReadAll(resp.Body)
+}
+
 func productTypeToCleanName(prodType string) string {
 	if strings.HasPrefix(prodType, "iPhone") {
 		prodType = prodType[6:]
