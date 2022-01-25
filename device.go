@@ -208,7 +208,6 @@ func (self *Device) shutdown() {
 func (self *Device) onCfaReady() {
     self.cfaRunning = true
     self.cf.notifyCfaStarted( self.udid )
-    self.cfa.ensureSession()
     // start video streaming
     
     self.forwardVidPorts( self.udid, func() {

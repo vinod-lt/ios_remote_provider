@@ -36,7 +36,6 @@ type CFA struct {
     nngSocket2    mangos.Socket
     keySocket     mangos.Socket
     disableUpdate bool
-    sessionMade   bool
     keyActive     bool
     keyLock       *sync.Mutex
 }
@@ -238,7 +237,6 @@ func (self *CFA) startCfaNng( onready func( int, chan bool ) ) {
             //if !success { onready( err, nil ) }
         }
         
-        self.create_session("")
         if onready != nil {
             onready( 0, stopChan )            
         }
@@ -445,43 +443,20 @@ func (self *CFA) stop() {
     }
 }
 
-func (self *CFA) ensureSession() {
-    sid := self.get_session()
-    if sid == "" {
-        //fmt.Printf("No CFA session exists. Creating\n" )
-        sid = self.create_session( "" )
-        //fmt.Printf("Created cfa session id=%s\n", sid )
-    } else {
-        //fmt.Printf("Session existing; id=%s\n", sid )
-    }
-}
-
-func ( self *CFA ) get_session() ( string ) {
-    if self.sessionMade {
-        return "1"
-    } else {
-        return ""
-    }
-}
-
-func ( self *CFA ) create_session( bundle string ) ( string ) {
+func ( self *CFA ) launch_app( bundle string ) {
     if bundle == "" {
-        //bundle = "com.apple.Preferences"
-        log.WithFields( log.Fields{
-            "type": "cfa_session_creating",
-            "bi": "NONE",
-        } ).Debug("Creating CFA session")
+        return
     } else {
         log.WithFields( log.Fields{
-            "type": "cfa_session_creating",
+            "type": "cfa_launch_app",
             "bi": bundle,
-        } ).Debug("Creating CFA session")
+        } ).Debug("CFA launching app")
     }
     
     self.disableUpdate = true
     
     json := fmt.Sprintf( `{
-        action: "createSession"
+        action: "launchApp"
         bundleId: "%s"
     }`, bundle )
         
@@ -489,24 +464,13 @@ func ( self *CFA ) create_session( bundle string ) ( string ) {
     if err != nil {
         fmt.Printf("Send error: %s\n", err )
     }
-    //fmt.Printf("Sent; receiving\n" )
     
     _, err = self.nngSocket.Recv()
-    sid := ""
     if err != nil {
-        fmt.Printf( "sessionCreate err: %s\n", err )
-    } else {
-        sid = "1"
-        self.sessionMade = true
-    }    
+        fmt.Printf( "launchApp err: %s\n", err )
+    }  
     
     self.disableUpdate = false
-    
-    log.WithFields( log.Fields{
-        "type": "cfa_session_created",
-    } ).Info("Created CFA session")
-    
-    return sid
 }
 
 func (self *CFA) clickAt( x int, y int ) {
@@ -846,7 +810,6 @@ func (self *CFA) ElPos(id string) (int,int,int,int) {
 }
 
 func (self *CFA) AlertInfo() ( uj.JNode, string ) {
-    self.ensureSession()
     self.nngSocket.Send([]byte(`{ action: "alertInfo" }`))
     jsonBytes, _ := self.nngSocket.Recv()
     fmt.Printf("alertInfo res: %s\n", string(jsonBytes) )
@@ -981,7 +944,7 @@ func (self *CFA) swipeBack() {
 }
 
 func (self *CFA) AddRecordingToCC() {
-    self.create_session("com.apple.Preferences")
+    self.launch_app("com.apple.Preferences")
     
     self.AppChanged("com.apple.Preferences")
     
@@ -1022,10 +985,7 @@ func (self *CFA) StartBroadcastStream( appName string, bid string, devConfig *CD
     method := devConfig.vidStartMethod
     ccRecordingMethod := devConfig.ccRecordingMethod
     
-    sid := self.create_session( bid )
-    if sid == "" {
-        // TODO error creating session
-    }
+    self.launch_app( bid )
     
     fmt.Printf("Checking for alerts\n")
     alerts := self.config.vidAlerts
