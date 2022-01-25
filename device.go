@@ -538,24 +538,22 @@ func (self *Device) startProcs() {
 					} else {
 						self.bridge.Kill(pid)
 					}
-
-					go func() {
-						time.Sleep(1000 * time.Millisecond)
-						orientation := self.cfa.getOrientation()
-						fmt.Printf("  To foreground - App orientation: %s\n", orientation)
-						self.orientation = orientation
-						self.devTracker.cf.orientationChange(self.udid, orientation)
-					}()
 				}
-			}
-			if strings.Contains(msg, "Setting process visibility to: Background") {
-				go func() {
-					time.Sleep(500 * time.Millisecond)
-					orientation := self.cfa.getOrientation()
-					fmt.Printf("  To background - App orientation: %s\n", orientation)
-					self.orientation = orientation
-					self.devTracker.cf.orientationChange(self.udid, orientation)
-				}()
+				/*} else if strings.Contains( msg, "Setting process visibility to: Background" ) {
+				  // Do something when returning to Springboard*/
+			} else if strings.HasPrefix(msg, "Received active interface orientation did change") {
+				// "SpringBoard(FrontBoard)[60] \u003cNotice\u003e: Received active interface orientation did change from landscapeLeft (4) to landscapeLeft"
+				index := strings.Index(msg, "to")
+				orientation := msg[index+3 : len(msg)-6]
+				//fmt.Printf( "%s", msg )
+				fmt.Printf("Interface orientated changed to %s\n", orientation)
+				self.orientation = orientation
+
+				/*time.Sleep( 500 * time.Millisecond )
+				  orientation := self.cfa.getOrientation()
+				  fmt.Printf( "  App orientation: %s\n", orientation )*/
+
+				self.devTracker.cf.orientationChange(self.udid, orientation)
 			}
 		} else if app == "dasd" {
 			if strings.HasPrefix(msg, "Foreground apps changed") {
@@ -568,20 +566,21 @@ func (self *Device) startProcs() {
 			} else if strings.HasPrefix(msg, "keyxr keyboard vanished") {
 				self.cfa.keyStop()
 			}
-		} else if app == "backboardd" {
-			// "Effective device orientation changed to: portrait (1)"
-			// portrait, landscapeRight, landscapeLeft, portraitUpsideDown
-			if strings.HasPrefix(msg, "Effective device orientation changed") {
-				fmt.Printf("%s", msg)
-				go func() {
-					time.Sleep(500 * time.Millisecond)
-					orientation := self.cfa.getOrientation()
-					fmt.Printf("  App orientation: %s\n", orientation)
-					self.orientation = orientation
-					self.devTracker.cf.orientationChange(self.udid, orientation)
-				}()
-			}
 		}
+		/*else if app == "backboardd" {
+		    // "Effective device orientation changed to: portrait (1)"
+		    // portrait, landscapeRight, landscapeLeft, portraitUpsideDown
+		    if strings.HasPrefix( msg, "Effective device orientation changed" ) {
+		        fmt.Printf( "%s", msg )
+		        go func() {
+		            time.Sleep( 500 * time.Millisecond )
+		            orientation := self.cfa.getOrientation()
+		            fmt.Printf( "  App orientation: %s\n", orientation )
+		            self.orientation = orientation
+		            self.devTracker.cf.orientationChange( self.udid, orientation )
+		        }()
+		    }
+		}*/
 	})
 }
 
