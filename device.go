@@ -209,7 +209,6 @@ func (self *Device) shutdown() {
 func (self *Device) onCfaReady() {
 	self.cfaRunning = true
 	self.cf.notifyCfaStarted(self.udid)
-	self.cfa.ensureSession()
 	// start video streaming
 
 	self.forwardVidPorts(self.udid, func() {
@@ -220,7 +219,6 @@ func (self *Device) onCfaReady() {
 			self.enableCFAVideo()
 		} else {
 			// TODO error
-			fmt.Println("Unknown video mode: " + videoMode)
 		}
 
 		self.startProcs2()
