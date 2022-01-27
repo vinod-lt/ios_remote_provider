@@ -482,11 +482,11 @@ func (self *Device) startProcs() {
                                 alert.match, alert.response )
                             if self.cfaRunning {
                                 useAlertMode = false
-                                btn := self.cfa.GetEl( "button", alert.response, true, 0 )
-                                if btn == "" {
+                                btnX,btnY := self.cfa.SysElPos( "button", alert.response )
+                                if btnX == 0 {
                                     fmt.Printf("Alert does not contain button \"%s\"\n", alert.response )
                                 } else {
-                                    self.cfa.ElClick( btn )
+                                    self.cfa.clickAt( int(btnX),int(btnY) )
                                 }
                             }
                             
@@ -976,10 +976,14 @@ func (self *Device) disableAssistiveTouch() {
 func (self *Device) toggleAssistiveTouch() {
     cfa := self.cfa
     self.cc()
-    shortcutsBtn := cfa.GetEl( "button", "Accessibility Shortcuts", true, 2 )
-    cfa.ElClick( shortcutsBtn )
-    atBtn := cfa.GetEl( "button", "AssistiveTouch", true, 2 )
-    cfa.ElClick( atBtn )
+    
+    time.Sleep( time.Second * 2 )
+    scutX,scutY := cfa.SysElPos( "button", "Accessibility Shortcuts" )
+    cfa.clickAt( int(scutX),int(scutY) )
+    
+    time.Sleep( time.Second * 2 )
+    atX,atY := cfa.SysElPos( "button", "AssistiveTouch" )
+    cfa.clickAt( int(atX),int(atY) )
     time.Sleep( time.Millisecond * 100 )
     cfa.home()
     time.Sleep( time.Millisecond * 300 )

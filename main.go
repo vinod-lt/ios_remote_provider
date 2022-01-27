@@ -62,7 +62,7 @@ func main() {
     
     clickButtonOpts := append( idOpt,
         uc.OPT("-label","Button label",uc.REQ),
-        uc.OPT("-system","System element",uc.FLAG),
+        //uc.OPT("-system","System element",uc.FLAG),
     )
     uclop.AddCmd( "clickEl", "Click a named element", runClickEl, clickButtonOpts )
     uclop.AddCmd( "forceTouchEl", "Force touch a named element", runForceTouchEl, clickButtonOpts )
@@ -373,8 +373,8 @@ func cfaWrapped( cmd *uc.Cmd, appName string, doStuff func( cfa *CFA, dev *Devic
 func runClickEl( cmd *uc.Cmd ) {
     cfaWrapped( cmd, "", func( cfa *CFA, dev *Device ) {
         label := cmd.Get("-label").String()
-        system := cmd.Get("-system").Bool()
-        btnName := cfa.GetEl( "any", label, system, 5 )
+        //system := cmd.Get("-system").Bool()
+        btnName := cfa.GetEl( "any", label, 5 )
         cfa.ElClick( btnName )
     } )
 }
@@ -382,8 +382,8 @@ func runClickEl( cmd *uc.Cmd ) {
 func runForceTouchEl( cmd *uc.Cmd ) {
     cfaWrapped( cmd, "", func( cfa *CFA, dev *Device ) {
         label := cmd.Get("-label").String()
-        system := cmd.Get("-system").Bool()
-        btnName := cfa.GetEl( "any", label, system, 5 )
+        //system := cmd.Get("-system").Bool()
+        btnName := cfa.GetEl( "any", label, 5 )
         cfa.ElForceTouch( btnName, 1 )
     } )
 }
@@ -391,8 +391,8 @@ func runForceTouchEl( cmd *uc.Cmd ) {
 func runLongTouchEl( cmd *uc.Cmd ) {
     cfaWrapped( cmd, "", func( cfa *CFA, dev *Device ) {
         label := cmd.Get("-label").String()
-        system := cmd.Get("-system").Bool()
-        btnName := cfa.GetEl( "any", label, system, 5 )
+        //system := cmd.Get("-system").Bool()
+        btnName := cfa.GetEl( "any", label, 5 )
         cfa.ElLongTouch( btnName )
     } )
 }
