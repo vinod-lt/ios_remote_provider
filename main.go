@@ -57,8 +57,6 @@ func main() {
 	uclop.AddCmd("wifiMac", "Get Wifi Mac address", runWifiMac, idOpt)
 	uclop.AddCmd("activeApps", "Get pids of active apps", runActiveApps, idOpt)
 	uclop.AddCmd("toLauncher", "Return to launcher screen", runToLauncher, idOpt)
-	uclop.AddCmd("refresh", "Get Stream Reset", runRefresh, idOpt)
-	uclop.AddCmd("restart", "Get Stream Restart", runRestart, idOpt)
 	uclop.AddCmd("alertinfo", "Get alert info", runAlertInfo, idOpt)
 	uclop.AddCmd("islocked", "Check if device screen is locked", runIsLocked, idOpt)
 	uclop.AddCmd("unlock", "Unlock device screen", runUnlock, idOpt)
@@ -66,7 +64,7 @@ func main() {
 
 	clickButtonOpts := append(idOpt,
 		uc.OPT("-label", "Button label", uc.REQ),
-		uc.OPT("-system", "System element", uc.FLAG),
+		//uc.OPT("-system","System element",uc.FLAG),
 	)
 	uclop.AddCmd("clickEl", "Click a named element", runClickEl, clickButtonOpts)
 	uclop.AddCmd("forceTouchEl", "Force touch a named element", runForceTouchEl, clickButtonOpts)
@@ -314,6 +312,8 @@ func runAddRec(cmd *uc.Cmd) {
 }
 
 func cfaWrapped(cmd *uc.Cmd, appName string, doStuff func(cfa *CFA, dev *Device)) {
+	openDbConnection()
+
 	config := NewConfig("config.json", "default.json", "calculated.json")
 
 	runCleanup(cmd)
@@ -385,8 +385,8 @@ func cfaWrapped(cmd *uc.Cmd, appName string, doStuff func(cfa *CFA, dev *Device)
 func runClickEl(cmd *uc.Cmd) {
 	cfaWrapped(cmd, "", func(cfa *CFA, dev *Device) {
 		label := cmd.Get("-label").String()
-		system := cmd.Get("-system").Bool()
-		btnName := cfa.GetEl("any", label, system, 5)
+		//system := cmd.Get("-system").Bool()
+		btnName := cfa.GetEl("any", label, 5)
 		cfa.ElClick(btnName)
 	})
 }
@@ -394,8 +394,8 @@ func runClickEl(cmd *uc.Cmd) {
 func runForceTouchEl(cmd *uc.Cmd) {
 	cfaWrapped(cmd, "", func(cfa *CFA, dev *Device) {
 		label := cmd.Get("-label").String()
-		system := cmd.Get("-system").Bool()
-		btnName := cfa.GetEl("any", label, system, 5)
+		//system := cmd.Get("-system").Bool()
+		btnName := cfa.GetEl("any", label, 5)
 		cfa.ElForceTouch(btnName, 1)
 	})
 }
@@ -403,8 +403,8 @@ func runForceTouchEl(cmd *uc.Cmd) {
 func runLongTouchEl(cmd *uc.Cmd) {
 	cfaWrapped(cmd, "", func(cfa *CFA, dev *Device) {
 		label := cmd.Get("-label").String()
-		system := cmd.Get("-system").Bool()
-		btnName := cfa.GetEl("any", label, system, 5)
+		//system := cmd.Get("-system").Bool()
+		btnName := cfa.GetEl("any", label, 5)
 		cfa.ElLongTouch(btnName)
 	})
 }
@@ -495,18 +495,6 @@ func runWifiIp(cmd *uc.Cmd) {
 	cfaWrapped(cmd, "", func(cfa *CFA, dev *Device) {
 		ip := cfa.WifiIp()
 		fmt.Println(ip)
-	})
-}
-func runRefresh(cmd *uc.Cmd) {
-	cfaWrapped(cmd, "", func(cfa *CFA, dev *Device) {
-		refresh := cfa.Refresh()
-		fmt.Println(refresh)
-	})
-}
-func runRestart(cmd *uc.Cmd) {
-	cfaWrapped(cmd, "", func(cfa *CFA, dev *Device) {
-		restart := cfa.Restart()
-		fmt.Println(restart)
 	})
 }
 
@@ -639,6 +627,9 @@ func common(cmd *uc.Cmd) *Config {
 
 	config := NewConfig(configPath, defaultsPath, calculatedPath)
 	config.cpuProfile = cmd.Get("-cpuprofile").Bool()
+
+	openDbConnection()
+
 	return config
 }
 
@@ -685,8 +676,6 @@ func runMain(cmd *uc.Cmd) {
 			return
 		}
 	}
-
-	openDbConnection()
 
 	devTracker := NewDeviceTracker(config, true, ids)
 	coro_sigterm(config, devTracker)
