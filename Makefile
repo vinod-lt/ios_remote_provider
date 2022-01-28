@@ -49,7 +49,7 @@ repos/WebDriverAgent:
 	git clone $(config_repos_wda) repos/WebDriverAgent
 
 repos/CFAgent:
-	git clone $(config_repos_cfa) repos/CFAgent
+	git clone -b dev $(config_repos_cfa) repos/CFAgent
 
 repos/ujsonin/versionMarker: repos/ujsonin repos/versionMarkers/ujsonin
 	cd repos/ujsonin && git pull

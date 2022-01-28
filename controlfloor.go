@@ -576,7 +576,7 @@ func (self *ControlFloor) openWebsocket() {
 						dev := self.DevTracker.getDevice(udid)
 						if dev != nil {
 							dev.RestartStreaming()
-							respondChan <- &CFR_Restart{Id: id, Restart: "done"}
+							respondChan <- &CFR_Restart{Id: id, Restart: "true"}
 						} else {
 							respondChan <- &CFR_Pong{id: id, text: "done"}
 						}
