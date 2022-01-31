@@ -37,7 +37,6 @@ type CFA struct {
 	nngSocket2    mangos.Socket
 	keySocket     mangos.Socket
 	disableUpdate bool
-	sessionMade   bool
 	keyActive     bool
 	keyLock       *sync.Mutex
 }
@@ -239,7 +238,6 @@ func (self *CFA) startCfaNng(onready func(int, chan bool)) {
 			//if !success { onready( err, nil ) }
 		}
 
-		self.create_session("")
 		if onready != nil {
 			onready(0, stopChan)
 		}
@@ -450,43 +448,20 @@ func (self *CFA) stop() {
 	}
 }
 
-func (self *CFA) ensureSession() {
-	sid := self.get_session()
-	if sid == "" {
-		//fmt.Printf("No CFA session exists. Creating\n" )
-		sid = self.create_session("")
-		//fmt.Printf("Created cfa session id=%s\n", sid )
-	} else {
-		//fmt.Printf("Session existing; id=%s\n", sid )
-	}
-}
-
-func (self *CFA) get_session() string {
-	if self.sessionMade {
-		return "1"
-	} else {
-		return ""
-	}
-}
-
-func (self *CFA) create_session(bundle string) string {
+func (self *CFA) launch_app(bundle string) {
 	if bundle == "" {
-		//bundle = "com.apple.Preferences"
-		log.WithFields(log.Fields{
-			"type": "cfa_session_creating",
-			"bi":   "NONE",
-		}).Debug("Creating CFA session")
+		return
 	} else {
 		log.WithFields(log.Fields{
-			"type": "cfa_session_creating",
+			"type": "cfa_launch_app",
 			"bi":   bundle,
-		}).Debug("Creating CFA session")
+		}).Debug("CFA launching app")
 	}
 
 	self.disableUpdate = true
 
 	json := fmt.Sprintf(`{
-        action: "createSession"
+        action: "launchApp"
         bundleId: "%s"
     }`, bundle)
 
@@ -494,24 +469,13 @@ func (self *CFA) create_session(bundle string) string {
 	if err != nil {
 		fmt.Printf("Send error: %s\n", err)
 	}
-	//fmt.Printf("Sent; receiving\n" )
 
 	_, err = self.nngSocket.Recv()
-	sid := ""
 	if err != nil {
-		fmt.Printf("sessionCreate err: %s\n", err)
-	} else {
-		sid = "1"
-		self.sessionMade = true
+		fmt.Printf("launchApp err: %s\n", err)
 	}
 
 	self.disableUpdate = false
-
-	log.WithFields(log.Fields{
-		"type": "cfa_session_created",
-	}).Info("Created CFA session")
-
-	return sid
 }
 
 func (self *CFA) clickAt(x int, y int) {
@@ -765,13 +729,8 @@ func (self *CFA) ElLongTouch(elId string) {
 	self.nngSocket.Recv()
 }
 
-func (self *CFA) GetEl(elType string, elName string, system bool, wait float32) string {
+func (self *CFA) GetEl(elType string, elName string, wait float32) string {
 	log.Info("getEl:", elName)
-
-	sysLine := ""
-	if system {
-		sysLine = "system:1"
-	}
 
 	waitLine := ""
 	if wait > 0 {
@@ -783,8 +742,7 @@ func (self *CFA) GetEl(elType string, elName string, system bool, wait float32) 
         type: "%s"
         id: "%s"
         %s
-        %s
-    }`, elType, elName, sysLine, waitLine)
+    }`, elType, elName, waitLine)
 
 	self.nngSocket.Send([]byte(json))
 	idBytes, _ := self.nngSocket.Recv()
@@ -792,6 +750,26 @@ func (self *CFA) GetEl(elType string, elName string, system bool, wait float32) 
 	log.Info("getEl-result:", string(idBytes))
 
 	return string(idBytes)
+}
+
+func (self *CFA) SysElPos(elType string, elName string) (float32, float32) {
+	log.Info("sysElPos:", elName)
+
+	json := fmt.Sprintf(`{
+        action: "sysElPos"
+        type: "%s"
+        id: "%s"
+    }`, elType, elName)
+
+	self.nngSocket.Send([]byte(json))
+	resBytes, _ := self.nngSocket.Recv()
+	if string(resBytes) == "" {
+		return 0, 0
+	}
+	root, _, _ := uj.ParseFull(resBytes)
+	x := root.Get("x").Float32()
+	y := root.Get("y").Float32()
+	return x, y
 }
 
 func (self *CFA) WindowSize() (int, int) {
@@ -804,6 +782,15 @@ func (self *CFA) WindowSize() (int, int) {
 
 	log.Info("windowSize-result:", width, height)
 	return width, height
+}
+
+func (self *CFA) getOrientation() string {
+	//log.Info("getOrientation")
+	self.nngSocket.Send([]byte(`{ action: "getOrientation" }`))
+	jsonBytes, _ := self.nngSocket.Recv()
+
+	//log.Info( "  result:", string(jsonBytes) )
+	return string(jsonBytes)
 }
 
 func (self *CFA) Source(bi string, pid int) string {
@@ -842,7 +829,6 @@ func (self *CFA) ElPos(id string) (int, int, int, int) {
 }
 
 func (self *CFA) AlertInfo() (uj.JNode, string) {
-	self.ensureSession()
 	self.nngSocket.Send([]byte(`{ action: "alertInfo" }`))
 	jsonBytes, _ := self.nngSocket.Recv()
 	fmt.Printf("alertInfo res: %s\n", string(jsonBytes))
@@ -985,14 +971,14 @@ func (self *CFA) swipeBack() {
 }
 
 func (self *CFA) AddRecordingToCC() {
-	self.create_session("com.apple.Preferences")
+	self.launch_app("com.apple.Preferences")
 
 	self.AppChanged("com.apple.Preferences")
 
 	i := 0
 	ccEl := ""
 	for {
-		ccEl = self.GetEl("staticText", "Control Center", false, 1)
+		ccEl = self.GetEl("staticText", "Control Center", 1)
 		if ccEl == "" {
 			self.swipeBack()
 			i++
@@ -1005,7 +991,7 @@ func (self *CFA) AddRecordingToCC() {
 	}
 	self.ElClick(ccEl)
 
-	customizeEl := self.GetEl("staticText", "Customize Controls", false, 2)
+	customizeEl := self.GetEl("staticText", "Customize Controls", 2)
 	self.ElClick(customizeEl)
 
 	//x,y,w,h := self.ElPos( addRecEl )
@@ -1017,7 +1003,7 @@ func (self *CFA) AddRecordingToCC() {
 
 	self.swipe(midx, midy, midx, midy-100, 0.1)
 
-	addRecEl := self.GetEl("button", "Insert Screen Recording", false, 2)
+	addRecEl := self.GetEl("button", "Insert Screen Recording", 2)
 
 	self.ElClick(addRecEl)
 }
@@ -1026,10 +1012,7 @@ func (self *CFA) StartBroadcastStream(appName string, bid string, devConfig *CDe
 	method := devConfig.vidStartMethod
 	ccRecordingMethod := devConfig.ccRecordingMethod
 
-	sid := self.create_session(bid)
-	if sid == "" {
-		// TODO error creating session
-	}
+	self.launch_app(bid)
 
 	fmt.Printf("Checking for alerts\n")
 	alerts := self.config.vidAlerts
@@ -1038,7 +1021,7 @@ func (self *CFA) StartBroadcastStream(appName string, bid string, devConfig *CDe
 		if alert == nil {
 			break
 		}
-		text := alert.Get("alert").String()
+		text := alert.Get("descr").String()
 
 		dismissed := false
 		// dismiss the alert
@@ -1046,11 +1029,13 @@ func (self *CFA) StartBroadcastStream(appName string, bid string, devConfig *CDe
 			if strings.Contains(text, alert.match) {
 				fmt.Printf("Alert matching \"%s\" appeared. Autoresponding with \"%s\"\n",
 					alert.match, alert.response)
-				btn := self.GetEl("button", alert.response, true, 0)
-				if btn == "" {
+
+				btnX, btnY := self.SysElPos("button", alert.response)
+
+				if btnX == 0 {
 					fmt.Printf("Alert does not contain button \"%s\"\n", alert.response)
 				} else {
-					self.ElClick(btn)
+					self.clickAt(int(btnX), int(btnY))
 					dismissed = true
 					break
 				}
@@ -1069,17 +1054,22 @@ func (self *CFA) StartBroadcastStream(appName string, bid string, devConfig *CDe
 	if method == "app" {
 		fmt.Printf("Starting vidApp through the app\n")
 
-		toSelector := self.GetEl("button", "Broadcast Selector", false, 5)
+		toSelector := self.GetEl("button", "Broadcast Selector", 5)
 		self.ElClick(toSelector)
 
-		os := self.dev.versionParts[0]
-		if os >= 14 {
-			startBtn := self.GetEl("button", "Start Broadcast", true, 5)
+		time.Sleep(time.Second * 1)
+		startX, startY := self.SysElPos("button", "Start Broadcast")
+		if startX == 0 {
+			startBtn := self.GetEl("staticText", "Start Broadcast", 2)
+			if startBtn == "" {
+				startBtn = self.GetEl("button", "Start Broadcast", 2)
+				if startBtn == "" {
+					fmt.Printf("Error! Could not fetch Start Broadcast button\n")
+				}
+			}
 			self.ElClick(startBtn)
-
 		} else {
-			startBtn := self.GetEl("staticText", "Start Broadcast", false, 5)
-			self.ElClick(startBtn)
+			self.clickAt(int(startX), int(startY))
 		}
 	} else if method == "controlCenter" {
 		fmt.Printf("Starting vidApp through control center\n")
@@ -1087,22 +1077,26 @@ func (self *CFA) StartBroadcastStream(appName string, bid string, devConfig *CDe
 		self.OpenControlCenter()
 		//self.Source()
 
-		devEl := self.GetEl("button", "Screen Recording", true, 5)
-		fmt.Printf("Selecting Screen Recording; el=%s\n", devEl)
+		time.Sleep(time.Second * 3)
+		srBtnX, srBtnY := self.SysElPos("button", "Screen Recording")
+		fmt.Printf("Selecting Screen Recording; x=%f,y=%f\n", srBtnX, srBtnY)
 		if ccRecordingMethod == "longTouch" {
-			self.ElLongTouch(devEl)
+			//self.ElLongTouch( devEl )
+			self.longPress(int(srBtnX), int(srBtnY), 2)
 		} else if ccRecordingMethod == "forceTouch" {
-			self.ElForceTouch(devEl, 1)
+			//self.ElForceTouch( devEl, 1 )
+			// TODO
 		} else {
 			fmt.Printf("ccRecordingMethod for a device must be either longTouch or forceTouch\n")
 			os.Exit(0)
 		}
 
-		appEl := self.GetEl("staticText", appName, true, 5)
-		self.ElClick(appEl)
+		time.Sleep(time.Second * 3)
+		appX, appY := self.SysElPos("staticText", appName)
+		self.clickAt(int(appX), int(appY))
 
-		startBtn := self.GetEl("button", "Start Broadcast", true, 5)
-		self.ElClick(startBtn)
+		startX, startY := self.SysElPos("button", "Start Broadcast")
+		self.clickAt(int(startX), int(startY))
 
 		time.Sleep(time.Second * 3)
 	} else if method == "manual" {
@@ -1168,4 +1162,25 @@ func (self *CFA) CleanBrowserData(bid string) {
 
 	self.nngSocket.Send(bytes)
 	self.nngSocket.Recv()
+}
+
+func (self *CFA) RestartStreaming() {
+	toSelector := self.GetEl("button", "Broadcast Selector", 5)
+	self.ElClick(toSelector)
+
+	time.Sleep(time.Second * 1)
+	startX, startY := self.SysElPos("button", "Start Broadcast")
+	if startX == 0 {
+		startBtn := self.GetEl("staticText", "Start Broadcast", 2)
+		if startBtn == "" {
+			startBtn = self.GetEl("button", "Start Broadcast", 2)
+			if startBtn == "" {
+				fmt.Printf("Error! Could not fetch Start Broadcast button\n")
+			}
+		}
+		self.ElClick(startBtn)
+	} else {
+		self.clickAt(int(startX), int(startY))
+	}
+	self.ToLauncher()
 }

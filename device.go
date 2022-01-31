@@ -87,6 +87,7 @@ type Device struct {
 	rtcChan           *webrtc.DataChannel
 	rtcPeer           *webrtc.PeerConnection
 	imgId             int
+	orientation       string
 }
 
 func NewDevice(config *Config, devTracker *DeviceTracker, udid string, bdev BridgeDev) *Device {
@@ -208,7 +209,6 @@ func (self *Device) shutdown() {
 func (self *Device) onCfaReady() {
 	self.cfaRunning = true
 	self.cf.notifyCfaStarted(self.udid)
-	self.cfa.ensureSession()
 	// start video streaming
 
 	self.forwardVidPorts(self.udid, func() {
@@ -219,7 +219,6 @@ func (self *Device) onCfaReady() {
 			self.enableCFAVideo()
 		} else {
 			// TODO error
-			fmt.Println("Unknown video mode: " + videoMode)
 		}
 
 		self.startProcs2()
@@ -484,11 +483,11 @@ func (self *Device) startProcs() {
 								alert.match, alert.response)
 							if self.cfaRunning {
 								useAlertMode = false
-								btn := self.cfa.GetEl("button", alert.response, true, 0)
-								if btn == "" {
+								btnX, btnY := self.cfa.SysElPos("button", alert.response)
+								if btnX == 0 {
 									fmt.Printf("Alert does not contain button \"%s\"\n", alert.response)
 								} else {
-									self.cfa.ElClick(btn)
+									self.cfa.clickAt(int(btnX), int(btnY))
 								}
 							}
 
@@ -513,7 +512,7 @@ func (self *Device) startProcs() {
 			}
 		} else if app == "SpringBoard(FrontBoard)" {
 			if strings.Contains(msg, "Setting process visibility to: Foreground") {
-				fmt.Printf("Process vis line:%s\n", msg)
+				fmt.Printf("Process vis line:%s", msg)
 				appStr := "application<"
 				index := strings.Index(msg, appStr)
 				if index != -1 {
@@ -525,7 +524,7 @@ func (self *Device) startProcs() {
 					pidEndPos := strings.Index(pidStr, "]")
 					pidStr = pidStr[:pidEndPos]
 					pid, _ := strconv.ParseUint(pidStr, 10, 64)
-					fmt.Printf("app - bid:%s pid:%d\n", app, pid)
+					fmt.Printf("  app - bid:%s pid:%d\n", app, pid)
 					allowed := true
 					for _, restrictedApp := range self.restrictedApps {
 						if restrictedApp == app {
@@ -538,6 +537,21 @@ func (self *Device) startProcs() {
 						self.bridge.Kill(pid)
 					}
 				}
+				/*} else if strings.Contains( msg, "Setting process visibility to: Background" ) {
+				  // Do something when returning to Springboard*/
+			} else if strings.HasPrefix(msg, "Received active interface orientation did change") {
+				// "SpringBoard(FrontBoard)[60] \u003cNotice\u003e: Received active interface orientation did change from landscapeLeft (4) to landscapeLeft"
+				index := strings.Index(msg, "to")
+				orientation := msg[index+3 : len(msg)-6]
+				//fmt.Printf( "%s", msg )
+				fmt.Printf("Interface orientated changed to %s\n", orientation)
+				self.orientation = orientation
+
+				/*time.Sleep( 500 * time.Millisecond )
+				  orientation := self.cfa.getOrientation()
+				  fmt.Printf( "  App orientation: %s\n", orientation )*/
+
+				self.devTracker.cf.orientationChange(self.udid, orientation)
 			}
 		} else if app == "dasd" {
 			if strings.HasPrefix(msg, "Foreground apps changed") {
@@ -551,6 +565,20 @@ func (self *Device) startProcs() {
 				self.cfa.keyStop()
 			}
 		}
+		/*else if app == "backboardd" {
+		    // "Effective device orientation changed to: portrait (1)"
+		    // portrait, landscapeRight, landscapeLeft, portraitUpsideDown
+		    if strings.HasPrefix( msg, "Effective device orientation changed" ) {
+		        fmt.Printf( "%s", msg )
+		        go func() {
+		            time.Sleep( 500 * time.Millisecond )
+		            orientation := self.cfa.getOrientation()
+		            fmt.Printf( "  App orientation: %s\n", orientation )
+		            self.orientation = orientation
+		            self.devTracker.cf.orientationChange( self.udid, orientation )
+		        }()
+		    }
+		}*/
 	})
 }
 
@@ -729,7 +757,24 @@ func (self *Device) onFirstFrame(event *DevEvent) {
 	}).Info("Video - first frame")
 }
 
+func (self *Device) adaptToRotation(x int, y int) (int, int) {
+	w := self.devConfig.uiWidth
+	h := self.devConfig.uiHeight
+
+	switch self.orientation {
+	case "portrait":
+	case "portraitUpsideDown":
+		x, y = (w - x), (h - y)
+	case "landscapeLeft":
+		x, y = y, (h - x)
+	case "landscapeRight":
+		x, y = (w - y), x
+	}
+	return x, y
+}
+
 func (self *Device) clickAt(x int, y int) {
+	x, y = self.adaptToRotation(x, y)
 	self.cfa.clickAt(x, y)
 }
 
@@ -951,10 +996,14 @@ func (self *Device) disableAssistiveTouch() {
 func (self *Device) toggleAssistiveTouch() {
 	cfa := self.cfa
 	self.cc()
-	shortcutsBtn := cfa.GetEl("button", "Accessibility Shortcuts", true, 2)
-	cfa.ElClick(shortcutsBtn)
-	atBtn := cfa.GetEl("button", "AssistiveTouch", true, 2)
-	cfa.ElClick(atBtn)
+
+	time.Sleep(time.Second * 2)
+	scutX, scutY := cfa.SysElPos("button", "Accessibility Shortcuts")
+	cfa.clickAt(int(scutX), int(scutY))
+
+	time.Sleep(time.Second * 2)
+	atX, atY := cfa.SysElPos("button", "AssistiveTouch")
+	cfa.clickAt(int(atX), int(atY))
 	time.Sleep(time.Millisecond * 100)
 	cfa.home()
 	time.Sleep(time.Millisecond * 300)
@@ -967,6 +1016,8 @@ func (self *Device) iohid(page int, code int) {
 
 func (self *Device) swipe(x1 int, y1 int, x2 int, y2 int, delayBy100 int) {
 	delay := float64(delayBy100) / 100.0
+	x1, y1 = self.adaptToRotation(x1, y1)
+	x2, y2 = self.adaptToRotation(x2, y2)
 	self.cfa.swipe(x1, y1, x2, y2, delay)
 }
 
@@ -1209,4 +1260,8 @@ func (self *Device) LaunchSafariUrl(url string) {
 
 func (self *Device) CleanBrowserData(bid string) {
 	self.cfa.CleanBrowserData(bid)
+}
+
+func (self *Device) RestartStreaming() {
+	self.cfa.RestartStreaming()
 }
