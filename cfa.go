@@ -1021,6 +1021,9 @@ func (self *CFA) StartBroadcastStream(appName string, bid string, devConfig *CDe
 		if alert == nil {
 			break
 		}
+		if alert.Get("descr") == nil {
+			break
+		}
 		text := alert.Get("descr").String()
 
 		dismissed := false
@@ -1068,8 +1071,10 @@ func (self *CFA) StartBroadcastStream(appName string, bid string, devConfig *CDe
 				}
 			}
 			self.ElClick(startBtn)
+			time.Sleep(time.Second * 3)
 		} else {
 			self.clickAt(int(startX), int(startY))
+			time.Sleep(time.Second * 3)
 		}
 	} else if method == "controlCenter" {
 		fmt.Printf("Starting vidApp through control center\n")
@@ -1179,8 +1184,10 @@ func (self *CFA) RestartStreaming() {
 			}
 		}
 		self.ElClick(startBtn)
+		time.Sleep(time.Second * 3)
 	} else {
 		self.clickAt(int(startX), int(startY))
+		time.Sleep(time.Second * 3)
 	}
 	self.ToLauncher()
 }
