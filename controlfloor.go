@@ -575,8 +575,8 @@ func (self *ControlFloor) openWebsocket() {
 					go func() {
 						dev := self.DevTracker.getDevice(udid)
 						if dev != nil {
-							restart := dev.Restart()
-							respondChan <- &CFR_Restart{Id: id, Restart: restart}
+							dev.RestartStreaming()
+							respondChan <- &CFR_Restart{Id: id, Restart: "true"}
 						} else {
 							respondChan <- &CFR_Pong{id: id, text: "done"}
 						}
@@ -662,6 +662,22 @@ func (self *ControlFloor) baseNotify(name string, udid string, variant string, v
 			"udid": censorUuid(udid),
 		}).Info(fmt.Sprintf("Notifying CF of %s", name))
 	}
+}
+
+func (self *ControlFloor) orientationChange(udid string, orientation string) {
+	ok := self.checkLogin()
+	if ok == false {
+		panic("Could not login when notifying of orientation change to '" + orientation + "' notify")
+	}
+
+	resp, _ := self.client.PostForm(self.base+"/provider/device/orientation", url.Values{
+		"udid":        {udid},
+		"orientation": {orientation},
+	})
+
+	// Ensure the request is closed out
+	defer resp.Body.Close()
+	ioutil.ReadAll(resp.Body)
 }
 
 func productTypeToCleanName(prodType string) string {
