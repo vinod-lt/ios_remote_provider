@@ -12,7 +12,7 @@
     bridge: "go-ios"
     repos: {
         wda: "https://github.com/appium/WebDriverAgent.git"
-        cfa: "https://github.com/LambdaTest/ControlFloorAgentPrivate.git"
+        cfa: "https://github.com/sonusainier/ControlFloorAgent.git"
         ujsonin: "https://github.com/nanoscopic/ujsonin.git"
         pbxproj: "https://github.com/kronenthaler/mod-pbxproj"
         iosif: "https://github.com/nanoscopic/iosif.git"
