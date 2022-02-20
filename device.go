@@ -182,7 +182,7 @@ type DevEvent struct {
 }
 
 func (self *Device) shutdown() {
-	go func() { self.shutdownVidStream() }()
+	//go func() { self.shutdownVidStream() }()
 
 	go func() { self.endProcs() }()
 
@@ -617,10 +617,10 @@ func (self *Device) enableAppVideo() {
 	vidPid := self.bridge.GetPid(self.config.vidAppExtBid)
 
 	// if it is running, go ahead and use it
-	/*if vidPid != 0 {
-	    self.vidMode = VID_APP
-	    return
-	}*/
+	if vidPid != 0 {
+		self.vidMode = VID_APP
+		return
+	}
 
 	// If it is running, kill it
 	if vidPid != 0 {
