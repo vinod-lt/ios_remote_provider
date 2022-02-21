@@ -471,7 +471,7 @@ func (self *ControlFloor) openWebsocket() {
 						dev := self.DevTracker.getDevice(udid)
 						if dev != nil {
 							if self.keyCounter == 0 {
-								dev.keys(text)
+								dev.keys(root.Get("keys").String())
 								self.keyCounter++
 							} else {
 								dev.text(text)
