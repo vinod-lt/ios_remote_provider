@@ -88,6 +88,7 @@ type Device struct {
 	rtcPeer           *webrtc.PeerConnection
 	imgId             int
 	orientation       string
+	isPortrait        bool
 }
 
 func NewDevice(config *Config, devTracker *DeviceTracker, udid string, bdev BridgeDev) *Device {
@@ -135,6 +136,7 @@ func NewDevice(config *Config, devTracker *DeviceTracker, udid string, bdev Brid
 	} else {
 		dev.wdaPort = devTracker.getPort()
 	}
+	dev.isPortrait = true
 	return &dev
 }
 
@@ -545,13 +547,17 @@ func (self *Device) startProcs() {
 				orientation := msg[index+3 : len(msg)-6]
 				//fmt.Printf( "%s", msg )
 				fmt.Printf("Interface orientated changed to %s\n", orientation)
-				self.orientation = orientation
+				if !self.isPortrait && strings.Contains(strings.ToLower(orientation), "portrait") {
+					fmt.Println("cfa detected portrait mode for device ", self.udid, " but skipping orientation change as device is still in landscape mode")
+				} else {
+					self.orientation = orientation
+					self.devTracker.cf.orientationChange(self.udid, orientation)
+				}
 
 				/*time.Sleep( 500 * time.Millisecond )
 				  orientation := self.cfa.getOrientation()
 				  fmt.Printf( "  App orientation: %s\n", orientation )*/
 
-				self.devTracker.cf.orientationChange(self.udid, orientation)
 			}
 		} else if app == "dasd" {
 			if strings.HasPrefix(msg, "Foreground apps changed") {

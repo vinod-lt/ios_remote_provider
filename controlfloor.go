@@ -590,6 +590,13 @@ func (self *ControlFloor) openWebsocket() {
 							respondChan <- &CFR_Pong{id: id, text: "done"}
 						}
 					}()
+				} else if mType == "rotate" {
+					udid := root.Get("udid").String()
+					isPortrait := root.Get("isPortrait").Bool()
+					fmt.Println("setting dev.isPortrait to ", isPortrait, " for device ", udid)
+					dev := self.DevTracker.getDevice(udid)
+					dev.isPortrait = isPortrait
+					respondChan <- &CFR_Pong{id: id, text: "done"}
 				}
 
 				//LT Changes End
@@ -663,7 +670,7 @@ func (self *ControlFloor) baseNotify(name string, udid string, variant string, v
 			"udid":       censorUuid(udid),
 			"values":     vals,
 			"httpStatus": resp.StatusCode,
-		}).Error(fmt.Sprintf("Failure notifying CF of %s", name))
+		}).Error(fmt.Sprintf("Failure 	notifying CF of %s", name))
 	} else {
 		log.WithFields(log.Fields{
 			"type": "cf_notify",
