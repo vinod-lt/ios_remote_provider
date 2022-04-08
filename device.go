@@ -94,13 +94,13 @@ func NewDevice(config *Config, devTracker *DeviceTracker, udid string, bdev Brid
 	dev := Device{
 		devTracker:      devTracker,
 		wdaPortFixed:    false,
-		cfaNngPort:      devTracker.getPort(),
-		cfaNngPort2:     devTracker.getPort(),
-		vidPort:         devTracker.getPort(),
-		vidLogPort:      devTracker.getPort(),
+		cfaNngPort:      devTracker.getFreePort(),
+		cfaNngPort2:     devTracker.getFreePort(),
+		vidPort:         devTracker.getFreePort(),
+		vidLogPort:      devTracker.getFreePort(),
 		vidMode:         VID_NONE,
-		vidControlPort:  devTracker.getPort(),
-		backupVideoPort: devTracker.getPort(),
+		vidControlPort:  devTracker.getFreePort(),
+		backupVideoPort: devTracker.getFreePort(),
 		backupActive:    false,
 		config:          config,
 		udid:            udid,
@@ -122,18 +122,18 @@ func NewDevice(config *Config, devTracker *DeviceTracker, udid string, bdev Brid
 			dev.wdaPort = devConfig.wdaPort
 			dev.wdaPortFixed = true
 		} else {
-			dev.wdaPort = devTracker.getPort()
+			dev.wdaPort = devTracker.getFreePort()
 		}
 
 		keyMethod := devConfig.keyMethod
 		if keyMethod == "base" {
 			dev.keyPort = 0
 		} else if keyMethod == "app" {
-			dev.keyPort = devTracker.getPort()
+			dev.keyPort = devTracker.getFreePort()
 		}
 
 	} else {
-		dev.wdaPort = devTracker.getPort()
+		dev.wdaPort = devTracker.getFreePort()
 	}
 	return &dev
 }

@@ -5,6 +5,9 @@ import (
     "strconv"
     "strings"
     "sync"
+    "math/rand"
+    "net"
+    "time"
     log "github.com/sirupsen/logrus"
     uj "github.com/nanoscopic/ujsonin/v2/mod"
 )
@@ -94,6 +97,31 @@ func ( self *DeviceTracker ) stopProc( procName string ) {
     self.lock.Unlock()
 }
 
+func IsFree(port string) bool {
+	timeout := 1 * time.Second
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort("localhost", port), timeout)
+	if err != nil {
+		return true
+	}
+	if conn != nil {
+		defer conn.Close()
+		return false
+	}
+	return true
+}
+
+func (self *DeviceTracker) getFreePort() int {
+	fmt.Printf("self.portMin %d, self.portMax %d\n", self.portMin, self.portMax)
+	port := rand.Intn(self.portMax-self.portMin) + self.portMin
+	portnumber := strconv.Itoa(port)
+	free := IsFree(portnumber)
+	if free {
+		fmt.Printf("Free port found : %d\n", port)
+		return port
+	} else {
+		return self.getFreePort()
+	}
+}
 func (self *DeviceTracker) getPort() (int) {
     var port int
     self.lock.Lock()
