@@ -485,8 +485,13 @@ func (self *CFA) clickAt(x int, y int) {
         y:%d
     }`, x, y)
 
-	self.nngSocket.Send([]byte(json))
-	self.nngSocket.Recv()
+	if self.nngSocket != nil {
+		self.nngSocket.Send([]byte(json))
+		self.nngSocket.Recv()
+	} else {
+		fmt.Println("nng socket connection not established yet")
+	}
+
 }
 
 func (self *CFA) doubleclickAt(x int, y int) {
@@ -846,10 +851,15 @@ func (self *CFA) AlertInfo() (uj.JNode, string) {
 }
 
 func (self *CFA) WifiIp() string {
-	self.nngSocket.Send([]byte(`{ action: "wifiIp" }`))
-	srcBytes, _ := self.nngSocket.Recv()
+	if self.nngSocket != nil {
+		self.nngSocket.Send([]byte(`{ action: "wifiIp" }`))
+		srcBytes, _ := self.nngSocket.Recv()
+		return string(srcBytes)
+	} else {
+		fmt.Println("nng socket connection not established")
+	}
+	return ""
 
-	return string(srcBytes)
 }
 
 func (self *CFA) ActiveApps() string {

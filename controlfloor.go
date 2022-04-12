@@ -36,6 +36,7 @@ type ControlFloor struct {
 	DevTracker *DeviceTracker
 	vidConns   map[string]*ws.Conn
 	selfSigned bool
+	keyCounter int
 }
 
 func NewControlFloor(config *Config) (*ControlFloor, chan bool) {
@@ -59,15 +60,16 @@ func NewControlFloor(config *Config) (*ControlFloor, chan bool) {
 	}
 
 	self := ControlFloor{
-		config:    config,
-		ready:     false,
-		base:      "http://" + config.cfHost,
-		wsBase:    "ws://" + config.cfHost,
-		cookiejar: jar,
-		client:    client,
-		pass:      pass,
-		lock:      &sync.Mutex{},
-		vidConns:  make(map[string]*ws.Conn),
+		config:     config,
+		ready:      false,
+		base:       "http://" + config.cfHost,
+		wsBase:     "ws://" + config.cfHost,
+		cookiejar:  jar,
+		client:     client,
+		pass:       pass,
+		lock:       &sync.Mutex{},
+		vidConns:   make(map[string]*ws.Conn),
+		keyCounter: 0,
 	}
 	if config.https {
 		self.base = "https://" + config.cfHost
@@ -455,23 +457,30 @@ func (self *ControlFloor) openWebsocket() {
 				} else if mType == "keys" {
 					udid := root.Get("udid").String()
 					keys := root.Get("keys").String()
-					go func() {
+					go func(udid string, keys string) {
 						dev := self.DevTracker.getDevice(udid)
 						if dev != nil {
 							dev.keys(keys)
 						}
 						respondChan <- &CFR_Pong{id: id, text: "done"}
-					}()
+					}(udid, keys)
 				} else if mType == "text" {
 					udid := root.Get("udid").String()
 					text := root.Get("text").StringEscaped()
-					go func() {
+					go func(udid string, text string) {
 						dev := self.DevTracker.getDevice(udid)
 						if dev != nil {
-							dev.text(text)
+							if self.keyCounter == 0 {
+								dev.keys(text)
+								self.keyCounter++
+								dev.text(text)
+							} else {
+								dev.text(text)
+							}
+
 						}
 						respondChan <- &CFR_Pong{id: id, text: "done"}
-					}()
+					}(udid, text)
 				} else if mType == "startStream" {
 					udid := root.Get("udid").String()
 					fmt.Printf("Got request to start video stream for %s\n", udid)
@@ -581,6 +590,13 @@ func (self *ControlFloor) openWebsocket() {
 							respondChan <- &CFR_Pong{id: id, text: "done"}
 						}
 					}()
+				} else if mType == "rotate" {
+					udid := root.Get("udid").String()
+					isPortrait := root.Get("isPortrait").Bool()
+					fmt.Println("setting dev.isPortrait to ", isPortrait, " for device ", udid)
+					dev := self.DevTracker.getDevice(udid)
+					dev.isPortrait = isPortrait
+					respondChan <- &CFR_Pong{id: id, text: "done"}
 				}
 
 				//LT Changes End
@@ -654,7 +670,7 @@ func (self *ControlFloor) baseNotify(name string, udid string, variant string, v
 			"udid":       censorUuid(udid),
 			"values":     vals,
 			"httpStatus": resp.StatusCode,
-		}).Error(fmt.Sprintf("Failure notifying CF of %s", name))
+		}).Error(fmt.Sprintf("Failure 	notifying CF of %s", name))
 	} else {
 		log.WithFields(log.Fields{
 			"type": "cf_notify",
