@@ -487,7 +487,12 @@ func (self *Device) startProcs() {
 								if btnX == 0 {
 									fmt.Printf("Alert does not contain button \"%s\"\n", alert.response)
 								} else {
-									self.cfa.clickAt(int(btnX), int(btnY))
+									args:={}string["bash", "-c", fmt.Sprintf("echo -n '{\"mode\":\"mouse-click\", \"x\":\"%s\", \"y\":\"%s\"}' | nc %s 6789", btnx, btny, self.WifiIp())]
+									op, err := exec.Command(args[0],args[1:]).CombinedOutput()
+									logger.Debugf("click-via-wda - arguments are %s", browser_lower, version_float)
+									if err != nil {
+										logger.Errorf("click-via-wda - failed, error %s, detailed error %s", err.Error(), string(op))
+									}
 								}
 							}
 
